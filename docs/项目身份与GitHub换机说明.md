@@ -11,8 +11,9 @@
 |----|-----|------|
 | **中文名** | 旅途 · Fluid Travel | 界面品牌名 |
 | **本地根目录** | `C:\project\travel-planner` | **仅此路径** |
-| **GitHub 仓库名（建议固定）** | `travel-planner` | 不要改成别的项目名 |
-| **远程地址形态** | `https://github.com/<你的用户名>/travel-planner` | 用户名以你的 GitHub 为准 |
+| **GitHub 用户名** | `1510952971` | 当前已登录并推送的账号 |
+| **GitHub 仓库名（固定）** | `travel-planner` | 不要改成别的项目名 |
+| **远程地址（已创建）** | `https://github.com/1510952971/travel-planner` | **仅此仓库**，勿与其它项目混淆 |
 | **入口文件** | `index.html` | 纯前端，无后端服务依赖 |
 | **启动脚本** | `start.bat` | 本目录内静态服务 |
 | **默认本地地址** | `http://127.0.0.1:8765` | 以 `start.bat` 实际端口为准 |
@@ -114,7 +115,7 @@ git push -u origin main
 ```bash
 # 建议放到独立目录，例如：
 cd D:\work
-git clone https://github.com/<你的用户名>/travel-planner.git
+git clone https://github.com/1510952971/travel-planner.git
 cd travel-planner
 ```
 
