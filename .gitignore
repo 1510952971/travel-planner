@@ -1,0 +1,29 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# Logs & caches
+*.log
+npm-debug.log*
+.cache/
+.parcel-cache/
+dist/
+build/
+node_modules/
+
+# Local env / secrets (if any added later)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local data dumps
+*.local.json
+/tmp/

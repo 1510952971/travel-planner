@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>旅途 · Fluid Travel</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,500&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app" id="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="行程侧栏">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-text">
+          <h1>旅途</h1>
+          <p>Fluid Travel</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm sidebar-toggle" id="btn-sidebar-collapse" title="收起侧栏" aria-expanded="true" aria-controls="sidebar">
+          ⟨
+        </button>
+      </div>
+
+      <div class="sidebar-body">
+        <button type="button" class="btn btn-primary btn-block" id="btn-new-trip">灵感生成</button>
+        <button type="button" class="btn btn-ghost btn-block" id="btn-blank-trip">空白画布</button>
+
+        <!-- 中间可滚动区：避免被底部导出栏遮挡（flex-1 + overflow-y） -->
+        <div class="sidebar-scroll">
+          <div class="sidebar-label">收藏的旅程</div>
+          <input type="search" id="trip-search" class="trip-search" placeholder="搜索行程…" autocomplete="off" />
+          <ul class="trip-list" id="trip-list"></ul>
+        </div>
+
+        <!-- 底部固定操作区（flex-shrink: 0，不随列表滚动） -->
+        <div class="sidebar-foot">
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-export-all">导出</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-import">导入</button>
+          <button type="button" class="btn btn-ghost btn-sm theme-toggle" id="btn-theme" title="切换浅色 / 曜石黑">◐</button>
+          <input type="file" id="import-file" accept="application/json,.json" hidden />
+        </div>
+      </div>
+    </aside>
+
+    <!-- 侧栏收起后：边缘展开钮 -->
+    <button type="button" class="sidebar-expand-fab hidden" id="btn-sidebar-expand" title="展开侧栏" aria-label="展开侧栏">
+      ⟩
+    </button>
+
+    <main class="main">
+      <!-- 界面1：灵感流 -->
+      <section class="empty-state" id="empty-state">
+        <div class="inspire-stage">
+          <div class="orb" id="inspire-orb" aria-hidden="true"></div>
+          <h2>这周末，想去哪儿透口气？</h2>
+          <p class="lede">像扭蛋一样抽出行程。一句话描述心情与预算，我们用本地灵感引擎拼出可改的路线卡片。</p>
+
+          <div class="prompt-shell">
+            <input id="inspire-prompt" placeholder="例：东京→京都 5 天环线自驾 / 有海能发呆预算 1500" autocomplete="off" />
+            <button type="button" class="btn btn-primary btn-sm" id="btn-inspire">扭一下</button>
+          </div>
+
+          <div class="chip-row" id="mood-chips">
+            <button type="button" class="chip active" data-style="balanced">均衡</button>
+            <button type="button" class="chip" data-style="deep">深度游</button>
+            <button type="button" class="chip" data-style="rush">特种兵</button>
+            <button type="button" class="chip" data-style="family">亲子</button>
+            <button type="button" class="chip" data-style="food">美食</button>
+            <button type="button" class="chip" data-style="photo">拍照</button>
+          </div>
+
+          <div class="gacha-deck" id="gacha-deck"></div>
+        </div>
+      </section>
+
+      <!-- 行程详情：大屏工作台（100vh 无全局滚动） -->
+      <section class="trip-view hidden" id="trip-view">
+        <!-- ① 顶栏：标题 + 全局操作（固定高度，不滚动） -->
+        <header class="workspace-top">
+          <input class="trip-title-input" id="trip-title" placeholder="给这段旅程起个名字" />
+          <div class="trip-header-actions">
+            <button type="button" class="btn btn-ghost" id="btn-undo" title="撤销上一步结构修改">撤销</button>
+            <button type="button" class="btn btn-ghost" id="btn-dup-trip">复制行程</button>
+            <button type="button" class="btn btn-primary" id="btn-regen">重抽日程</button>
+            <button type="button" class="btn btn-ghost" id="btn-print">打印</button>
+            <button type="button" class="btn btn-ghost" id="btn-export-one">JSON</button>
+            <button type="button" class="btn btn-ghost" id="btn-export-md">Markdown</button>
+            <button type="button" class="btn btn-ghost" id="btn-export-html">分享页</button>
+            <button type="button" class="btn btn-ghost" id="btn-export-editorial">摄影志</button>
+            <button type="button" class="btn btn-ghost" id="btn-copy-share">复制摘要</button>
+            <button type="button" class="btn btn-ghost" id="btn-help">?</button>
+            <button type="button" class="btn btn-danger" id="btn-delete-trip">删除</button>
+          </div>
+        </header>
+
+        <!-- ② 城市 + 时间：置顶配置卡片（在概览/各 Tab 之上） -->
+        <aside class="config-bar" id="config-rail" aria-label="行程参数配置">
+          <div class="config-bar-card">
+            <div class="config-bar-main">
+              <div class="dest-field">
+                <div class="config-bar-title-row">
+                  <span class="dest-field-label">路线站序 <em>省·市·县 · 可重复途经</em></span>
+                  <div class="route-mode-row" id="route-mode-row">
+                    <span class="route-mode-label">路线</span>
+                    <label class="route-mode-opt"><input type="radio" name="route-mode" value="linear" checked /> 线性</label>
+                    <label class="route-mode-opt"><input type="radio" name="route-mode" value="loop" /> 环线</label>
+                  </div>
+                </div>
+                <div class="dest-path-preview" id="dest-path-preview">尚未选择城市</div>
+                <div class="dest-chips" id="dest-chips" aria-label="路线站序"></div>
+                <div class="dest-pick-label">点选省·市；「▾县」选下辖县市</div>
+                <div class="dest-pick-grid" id="dest-pick-grid" role="group" aria-label="常用城市多选"></div>
+                <div class="dest-add-row">
+                  <input id="trip-dest-input" list="dest-suggest" placeholder="手写：浙江·金华·义乌" autocomplete="off" />
+                  <button type="button" class="btn btn-primary btn-sm" id="btn-add-dest">加入</button>
+                </div>
+              </div>
+              <div class="config-meta-grid">
+                <label>出发 <input type="date" id="trip-start" /></label>
+                <label>返回 <input type="date" id="trip-end" /></label>
+                <label>人数 <input type="number" id="trip-people" min="1" value="1" /></label>
+                <label>偏好
+                  <select id="trip-style">
+                    <option value="balanced">均衡游</option>
+                    <option value="deep">深度游</option>
+                    <option value="rush">特种兵</option>
+                    <option value="family">亲子</option>
+                    <option value="food">美食向</option>
+                    <option value="photo">拍照打卡</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- ③ Tab + 概览/日程等面板（在配置卡片下方） -->
+        <div class="workspace-stage">
+          <nav class="tabs" id="tabs" aria-label="功能页签">
+            <button type="button" class="tab active" data-tab="overview">概览</button>
+            <button type="button" class="tab" data-tab="days">日程画布</button>
+            <button type="button" class="tab" data-tab="budget">预算</button>
+            <button type="button" class="tab" data-tab="split">泡泡分账</button>
+            <button type="button" class="tab" data-tab="pack">行李</button>
+            <button type="button" class="tab" data-tab="light">光影</button>
+            <button type="button" class="tab" data-tab="gear">装备</button>
+            <button type="button" class="tab" data-tab="lens">镜头</button>
+            <button type="button" class="tab" data-tab="buddy">搭子</button>
+            <button type="button" class="tab" data-tab="notes">备忘</button>
+          </nav>
+
+          <div class="workspace-panels">
+        <div class="panel active" id="panel-overview">
+          <div class="stat-grid">
+            <div class="stat-card">
+              <span class="stat-label">Days</span>
+              <strong class="stat-value" id="stat-days">—</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Spots</span>
+              <strong class="stat-value" id="stat-acts">0</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Budget</span>
+              <strong class="stat-value" id="stat-budget">¥0</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Pack</span>
+              <strong class="stat-value" id="stat-pack">0/0</strong>
+            </div>
+          </div>
+          <div class="card progress-card">
+            <div class="card-head-row">
+              <h3 style="margin:0">行程完成度</h3>
+              <span class="mood-row">
+                <label class="mood-label">心情
+                  <select id="trip-mood" title="行程心情标签">
+                    <option value="✨">✨ 期待</option>
+                    <option value="🌊">🌊 发呆</option>
+                    <option value="🍜">🍜 干饭</option>
+                    <option value="🏃">🏃 特种兵</option>
+                    <option value="👨‍👩‍👧">👨‍👩‍👧 亲子</option>
+                    <option value="📷">📷 出片</option>
+                    <option value="💤">💤 躺平</option>
+                  </select>
+                </label>
+              </span>
+            </div>
+            <div class="progress-grid">
+              <div class="progress-item">
+                <div class="progress-top"><span>行前清单</span><strong id="prog-tips">0%</strong></div>
+                <div class="bar-track"><div class="bar-fill" id="prog-tips-bar" style="width:0%"></div></div>
+              </div>
+              <div class="progress-item">
+                <div class="progress-top"><span>行李打包</span><strong id="prog-pack">0%</strong></div>
+                <div class="bar-track"><div class="bar-fill" id="prog-pack-bar" style="width:0%"></div></div>
+              </div>
+              <div class="progress-item">
+                <div class="progress-top"><span>预算已付</span><strong id="prog-paid">0%</strong></div>
+                <div class="bar-track"><div class="bar-fill" id="prog-paid-bar" style="width:0%"></div></div>
+              </div>
+              <div class="progress-item">
+                <div class="progress-top"><span>日程丰满度</span><strong id="prog-days">0%</strong></div>
+                <div class="bar-track"><div class="bar-fill" id="prog-days-bar" style="width:0%"></div></div>
+              </div>
+            </div>
+            <p class="hint-text" id="prog-hint">完善清单与日程，完成度会自己涨。</p>
+            <p class="hint-text" id="per-person-hint"></p>
+          </div>
+          <div class="card" id="weather-card">
+            <div class="card-head-row">
+              <h3 style="margin:0">目的地天气</h3>
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh-weather">刷新</button>
+            </div>
+            <div id="weather-city-tabs" class="weather-city-tabs" hidden></div>
+            <div id="weather-box" class="weather-box">
+              <span class="hint-text">填写目的地与日期后自动拉取（Open-Meteo，免费）</span>
+            </div>
+            <p class="hint-text" id="weather-hint" style="margin:8px 0 0">多城时按日程日切换城市预报；点城市标签可筛选。</p>
+          </div>
+          <div class="card">
+            <h3>旅程叙事</h3>
+            <textarea id="trip-summary" rows="4" placeholder="用一两段话写下这次旅行想留下的感觉…"></textarea>
+          </div>
+          <div class="card">
+            <h3>行前轻清单</h3>
+            <ul class="quick-tips" id="quick-tips">
+              <li><label><input type="checkbox" data-tip="visa" /> 证件 / 签证</label></li>
+              <li><label><input type="checkbox" data-tip="ticket" /> 大交通已订</label></li>
+              <li><label><input type="checkbox" data-tip="hotel" /> 住宿已订</label></li>
+              <li><label><input type="checkbox" data-tip="ins" /> 保险</label></li>
+              <li><label><input type="checkbox" data-tip="weather" /> 天气与穿衣</label></li>
+              <li><label><input type="checkbox" data-tip="map" /> 离线地图</label></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-days">
+          <div class="panel-toolbar">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-add-day">＋ 一天</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-gen-days">按日期铺开</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-optimize-all">优化全部日路线</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh-map">刷新路线</button>
+            <label class="hint-text" style="margin:0;display:inline-flex;align-items:center;gap:6px">
+              <input type="checkbox" id="chk-caution" /> 示意安全圈
+            </label>
+            <span class="hint-text" style="margin:0" id="route-km-hint">⋮⋮ 跨天拖拽 · 同日可一键优化顺序</span>
+          </div>
+          <div class="canvas-split">
+            <div class="map-pane glass-pane" id="map-pane">
+              <div class="map-pane-head">
+                <span>路线地图</span>
+                <div class="map-pane-tools">
+                  <label class="map-pick-toggle" title="开启后在地图上点击添加站点">
+                    <input type="checkbox" id="chk-map-pick" /> 选点
+                  </label>
+                  <select id="map-pick-day" class="map-pick-day" title="选点落入哪一天" aria-label="选点目标日"></select>
+                  <span class="map-legend" id="map-legend">OSM · 约 — km</span>
+                </div>
+              </div>
+              <div id="trip-map" class="trip-map" role="img" aria-label="行程地图，可开启选点"></div>
+              <div id="day-km-list" class="day-km-list"></div>
+              <p class="map-footnote" id="map-footnote">
+                开启「选点」后点击地图，将坐标加入所选日。免费 OSM 瓦片 · 非商用导航。
+              </p>
+            </div>
+            <div class="timeline-pane">
+              <div id="days-container" class="days-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-budget">
+          <div class="panel-toolbar">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-add-budget">＋ 记一笔</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-seed-budget">按天数生成骨架</button>
+            <div class="budget-total">合计 <strong id="budget-total">¥0</strong></div>
+          </div>
+          <div class="budget-charts card" style="margin-bottom:14px">
+            <h3>花费结构</h3>
+            <div id="budget-chart-cat" class="bar-chart"></div>
+            <h3 style="margin-top:16px">按日汇总</h3>
+            <div id="budget-chart-day" class="bar-chart"></div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>日</th>
+                  <th>类别</th>
+                  <th>说明</th>
+                  <th>金额</th>
+                  <th>币种</th>
+                  <th>谁付的</th>
+                  <th>OK</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="budget-tbody"></tbody>
+            </table>
+          </div>
+          <p class="hint-text">支持多币种与按日归类；结算在「泡泡分账」。柱状为折合人民币。</p>
+        </div>
+
+        <div class="panel" id="panel-split">
+          <div class="card">
+            <h3>旅伴泡泡</h3>
+            <div class="bubble-stage" id="bubble-stage"></div>
+            <div class="panel-toolbar">
+              <input id="companion-name" placeholder="拉一个旅伴进来" style="max-width:200px;background:var(--bg-soft);border:1px solid var(--border);border-radius:12px;padding:8px 12px" />
+              <button type="button" class="btn btn-primary btn-sm" id="btn-add-companion">加入</button>
+            </div>
+            <ul class="companion-list" id="companion-list" hidden></ul>
+          </div>
+          <div class="card">
+            <h3>轻汇率</h3>
+            <div class="rate-grid">
+              <label>USD <input type="number" id="rate-USD" step="0.01" value="7.2" /></label>
+              <label>EUR <input type="number" id="rate-EUR" step="0.01" value="7.8" /></label>
+              <label>JPY <input type="number" id="rate-JPY" step="0.0001" value="0.048" /></label>
+              <label>HKD <input type="number" id="rate-HKD" step="0.01" value="0.92" /></label>
+            </div>
+          </div>
+          <div class="card">
+            <h3>钱的流向</h3>
+            <div id="split-result" class="split-result">记一笔账、加一个泡泡，流向会自己长出来。</div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-pack">
+          <div class="panel-toolbar">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-add-pack">＋ 物品</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-pack-template">常用模板</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-pack-weather">按天气加建议</button>
+            <span class="hint-text" style="margin:0" id="pack-weather-hint">先拉概览天气，再一键加伞/厚衣等</span>
+          </div>
+          <div id="pack-suggest-tags" class="suggest-tags"></div>
+          <ul class="pack-list" id="pack-list"></ul>
+        </div>
+
+        <!-- 光影气象看板 -->
+        <div class="panel" id="panel-light">
+          <div class="card">
+            <div class="card-head-row">
+              <h3 style="margin:0">光影气象看板</h3>
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh-light">刷新时刻</button>
+            </div>
+            <p class="hint-text">日出日落/黄金/蓝调为本地天文近似；云量来自 Open-Meteo 小时预报（免费）。</p>
+            <div class="light-day-pick panel-toolbar">
+              <label>选日
+                <select id="light-day-select"></select>
+              </label>
+              <button type="button" class="btn btn-primary btn-sm" id="btn-snap-magic">拍摄点吸附黄金/蓝调</button>
+            </div>
+            <div class="magic-strip" id="magic-strip" aria-hidden="true"></div>
+            <div id="magic-labels" class="magic-labels"></div>
+            <div id="light-atmosphere" class="light-atmosphere"></div>
+            <div id="safety-box" class="safety-box"></div>
+          </div>
+        </div>
+
+        <!-- 装备 -->
+        <div class="panel" id="panel-gear">
+          <div class="card">
+            <div class="card-head-row">
+              <h3 style="margin:0">装备库与称重</h3>
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-add-gear">＋ 装备</button>
+            </div>
+            <label class="hint-text">航司电池模板
+              <select id="airline-preset" style="margin-left:8px;background:var(--bg-soft);border:1px solid var(--border);border-radius:8px;padding:6px 8px">
+                <option value="generic">通用国际</option>
+                <option value="ca">国航/南航类</option>
+                <option value="ana">日航/全日空类</option>
+                <option value="budget">廉航保守</option>
+              </select>
+            </label>
+            <div id="gear-list" class="gear-list"></div>
+            <div class="gear-summary" id="gear-summary"></div>
+            <div id="gear-compliance" class="gear-compliance"></div>
+          </div>
+        </div>
+
+        <!-- 镜头 FOV -->
+        <div class="panel" id="panel-lens">
+          <div class="card">
+            <h3>镜头焦段模拟器</h3>
+            <p class="hint-text">示意视野角（非 AR/街景）。画幅与焦距影响水平 FOV 估算。</p>
+            <div class="form-grid">
+              <label>画幅
+                <select id="lens-sensor">
+                  <option value="full">全画幅</option>
+                  <option value="apsc">APS-C</option>
+                  <option value="m43">M4/3</option>
+                </select>
+              </label>
+              <label>焦距 (mm)
+                <input type="number" id="lens-focal" value="50" min="8" max="800" />
+              </label>
+            </div>
+            <div class="dial-wrap">
+              <label>时间拨轮（快门仪式感）
+                <input type="range" id="lens-time-dial" min="0" max="1439" value="1110" />
+              </label>
+              <div class="dial-readout" id="lens-time-readout">18:30</div>
+            </div>
+            <div class="fov-stage" id="fov-stage">
+              <div class="fov-wedge" id="fov-wedge"></div>
+              <div class="fov-label" id="fov-label">50mm · FOV —°</div>
+            </div>
+            <p class="hint-text" id="sun-align-hint">选择光影日与拨轮时间，可查看是否接近黄金/蓝调（非 AR 轨迹）。</p>
+          </div>
+        </div>
+
+        <!-- 找搭子 -->
+        <div class="panel" id="panel-buddy">
+          <div class="card">
+            <h3>找搭子（本地演示）</h3>
+            <p class="hint-text">数据只存在本机。可发布自己的行程卡片，并按城市/日期重合匹配。非真实社交网络。</p>
+            <div class="form-grid">
+              <label>昵称 <input id="buddy-name" placeholder="StreetShooter" /></label>
+              <label>角色
+                <select id="buddy-role">
+                  <option value="photographer">摄影师</option>
+                  <option value="model">模特</option>
+                </select>
+              </label>
+              <label>城市 <input id="buddy-city" placeholder="东京" /></label>
+              <label>风格 <input id="buddy-style" placeholder="人像 / 街拍 / 风光" /></label>
+              <label>开始 <input type="date" id="buddy-start" /></label>
+              <label>结束 <input type="date" id="buddy-end" /></label>
+            </div>
+            <div class="panel-toolbar">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-buddy-post">发布到搭子板</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-buddy-match">按当前行程匹配</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-tfp-copy">复制 TFP 协议模板</button>
+            </div>
+            <div id="buddy-board" class="buddy-board"></div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-notes">
+          <div class="card">
+            <div class="card-head-row">
+              <h3 style="margin:0">备忘碎片</h3>
+              <div class="panel-toolbar" style="margin:0">
+                <button type="button" class="btn btn-ghost btn-sm" data-note-tpl="booking">预订模板</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-note-tpl="meet">集合模板</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-note-tpl="alert">禁忌模板</button>
+              </div>
+            </div>
+            <textarea id="trip-notes" rows="12" placeholder="预订号、集合点、不能吃辣的人…"></textarea>
+          </div>
+          <div class="card">
+            <h3>提醒清单（本地勾选）</h3>
+            <ul class="remind-list" id="remind-list"></ul>
+            <div class="panel-toolbar">
+              <input id="remind-input" placeholder="加一条提醒，例如：出发前充共享单车" style="flex:1;min-width:180px;background:var(--bg-soft);border:1px solid var(--border);border-radius:12px;padding:8px 12px" />
+              <button type="button" class="btn btn-primary btn-sm" id="btn-add-remind">添加</button>
+            </div>
+          </div>
+        </div>
+          </div><!-- /.workspace-panels -->
+        </div><!-- /.workspace-stage -->
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-mask hidden" id="help-mask">
+    <div class="modal" role="dialog" aria-labelledby="help-title">
+      <h2 id="help-title">快捷键与用法</h2>
+      <div class="help-grid">
+        <div><kbd>Ctrl</kbd>+<kbd>Z</kbd></div><div>撤销结构修改</div>
+        <div><kbd>Enter</kbd></div><div>首页输入框：扭蛋</div>
+        <div>⋮⋮ 拖拽</div><div>景点排序，可跨 Day</div>
+        <div>光影/装备/镜头/搭子</div><div>已并入普通模式，顶栏常驻</div>
+        <div>光影吸附</div><div>时间失焦或「吸附黄金/蓝调」对齐 Magic Hour</div>
+        <div>摄影志</div><div>杂志风 HTML 导出</div>
+        <div>复制摘要</div><div>可粘贴到微信的纯文本行程</div>
+        <div>多城行程</div><div>站序「省·市」或「省·市·县」（浙江·金华·义乌）；▾县 展开下辖；可重复途经</div>
+        <div>侧栏</div><div>点品牌旁 ⟨ 收起；左缘 ⟩ 或按键 <kbd>[</kbd> 展开/切换</div>
+        <div>城市排序</div><div>拖拽芯片调站序；× 只删本站不删其它同名站；重抽按站序分天</div>
+        <div>按日天气</div><div>概览天气按日程日+当日城市显示；点城市标签可筛选</div>
+        <div>一句话多城</div><div>例：东京→京都→大阪 5天环线 · 或 成都,重庆 周末</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" id="help-close">知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-mask hidden" id="wizard-mask">
+    <div class="modal" role="dialog">
+      <h2>精修生成参数</h2>
+      <p class="modal-desc">需要更精确时用这里；首页一句话也能直接扭蛋。</p>
+      <div class="form-grid">
+        <label class="span2">路线站序 *（省·市 或 省·市·县，可重复途经）
+          <div class="dest-pick-grid wiz-dest-pick" id="wiz-dest-pick" role="group" aria-label="向导站序点选"></div>
+          <input id="wiz-dest" list="dest-suggest" placeholder="例：上海→浙江·金华·义乌→浙江·金华" />
+          <span class="hint-text" id="wiz-dest-preview" style="margin:4px 0 0;display:block">已选：—</span>
+        </label>
+        <label>天数 * <input id="wiz-days" type="number" min="1" max="30" value="3" /></label>
+        <label>出发 <input id="wiz-start" type="date" /></label>
+        <label>人数 <input id="wiz-people" type="number" min="1" value="2" /></label>
+        <label>路线
+          <select id="wiz-route-mode">
+            <option value="linear">线性 A→B→C</option>
+            <option value="loop">环线（回到起点）</option>
+          </select>
+        </label>
+        <label class="span2">偏好
+          <select id="wiz-style">
+            <option value="balanced">均衡游</option>
+            <option value="deep">深度游</option>
+            <option value="rush">特种兵</option>
+            <option value="family">亲子</option>
+            <option value="food">美食向</option>
+            <option value="photo">拍照打卡</option>
+          </select>
+        </label>
+        <label class="span2">旅伴（逗号分隔）
+          <input id="wiz-companions" placeholder="小红, 阿杰" />
+        </label>
+      </div>
+      <datalist id="dest-suggest">
+        <option value="上海"></option>
+        <option value="北京"></option>
+        <option value="重庆"></option>
+        <option value="浙江·杭州"></option>
+        <option value="浙江·杭州·淳安"></option>
+        <option value="浙江·金华"></option>
+        <option value="浙江·金华·义乌"></option>
+        <option value="浙江·金华·东阳"></option>
+        <option value="浙江·金华·永康"></option>
+        <option value="浙江·宁波"></option>
+        <option value="江苏·苏州"></option>
+        <option value="江苏·苏州·昆山"></option>
+        <option value="江苏·南京"></option>
+        <option value="广西·桂林·阳朔"></option>
+        <option value="四川·成都"></option>
+        <option value="广东·广州"></option>
+        <option value="广东·深圳"></option>
+        <option value="福建·厦门"></option>
+        <option value="陕西·西安"></option>
+        <option value="云南·丽江"></option>
+        <option value="云南·大理"></option>
+        <option value="海南·三亚"></option>
+        <option value="香港"></option>
+        <option value="台湾·台北"></option>
+        <option value="日本·东京"></option>
+        <option value="日本·京都"></option>
+        <option value="日本·大阪"></option>
+      </datalist>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="wiz-cancel">取消</button>
+        <button type="button" class="btn btn-primary" id="wiz-ok">生成</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+  <div class="offline-pill" id="offline-pill">离线可用 · 已缓存壳</div>
+  <div id="lottie-overlay" class="lottie-overlay hidden"></div>
+  <div id="lottie-orb-slot" class="lottie-orb-slot" aria-hidden="true"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="js/city-catalog.js"></script>
+  <script src="js/generator.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/geo-utils.js"></script>
+  <script src="js/pack-smart.js"></script>
+  <script src="js/astro.js"></script>
+  <script src="js/gear.js"></script>
+  <script src="js/photo-extra.js"></script>
+  <script src="js/lottie-fx.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
