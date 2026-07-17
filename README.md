@@ -28,7 +28,7 @@
 ## 从 GitHub 换电脑使用
 
 ```bash
-git clone https://github.com/<你的用户名>/travel-planner.git
+git clone https://github.com/1510952971/travel-planner.git
 cd travel-planner
 ```
 
@@ -45,7 +45,7 @@ cd travel-planner
 1. 进入 **`C:\project\travel-planner`**（不要在别的项目目录操作）  
 2. 双击 **`push-to-github.bat`**  
 3. 浏览器完成 GitHub 登录  
-4. 成功后访问：`https://github.com/<你的用户名>/travel-planner`  
+4. 成功后访问：`https://github.com/1510952971/travel-planner`  
 
 脚本固定仓库名为 **`travel-planner`**，避免误建/误推其它项目。
 
