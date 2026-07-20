@@ -715,6 +715,20 @@
    * @param {boolean} enabled
    * @param {(lat: number, lng: number) => void} [onPick]
    */
+  /** 仅选点模式下允许拖动地图钉；平时锁定防误触 */
+  function syncPinDragging() {
+    if (!layerGroup) return;
+    layerGroup.eachLayer(function (layer) {
+      if (!layer || !layer.dragging) return;
+      // 只有标记为地图钉的 marker 才可拖
+      if (!layer.options || !layer.options.mapPin) return;
+      try {
+        if (pickModeOn) layer.dragging.enable();
+        else layer.dragging.disable();
+      } catch (_) {}
+    });
+  }
+
   function setPickMode(enabled, onPick) {
     const m = ensureMap();
     if (!m) return;
@@ -727,9 +741,12 @@
     if (el) el.style.cursor = enabled ? "crosshair" : "";
     const pane = document.getElementById("map-pane");
     if (pane) pane.classList.toggle("is-pick-mode", !!enabled);
+    // 开/关选点时同步钉点是否可拖（默认锁定）
+    syncPinDragging();
     if (enabled && typeof onPick === "function") {
       pickClickHandler = function (e) {
         if (!e || !e.latlng) return;
+        // 点在已有 marker 上时 Leaflet 通常不会冒泡到 map click；此处仅空白处加点
         onPick(e.latlng.lat, e.latlng.lng);
       };
       m.on("click", pickClickHandler);
@@ -836,8 +853,11 @@
         const cityTag = dayCity
           ? `<br/><span style="opacity:.65">📍 ${escapeHtml(dayCity)}</span>`
           : "";
-        const pinTag = acts[ai]._mapPinned
-          ? `<br/><span style="opacity:.8;color:#00b8c0">📌 地图选点</span>`
+        const isMapPin = !!acts[ai]._mapPinned;
+        const pinTag = isMapPin
+          ? pickModeOn
+            ? `<br/><span style="opacity:.8;color:#00b8c0">📌 选点模式 · 可拖动微调</span>`
+            : `<br/><span style="opacity:.8;color:#00b8c0">📌 地图钉（锁定）· 勾选「选点」才可拖</span>`
           : "";
         const coordTag =
           acts[ai].lat != null
@@ -846,10 +866,13 @@
               ).toFixed(5)}, ${Number(acts[ai].lng).toFixed(5)}</code>`
             : "";
         const seqLabel = "D" + (di + 1) + "-" + (ai + 1);
+        // 钉点创建时带 dragging 能力，但默认 disable，仅选点模式 enable（防误触）
         const mk = L.marker(usePt, {
           icon: markerIcon(color, seqLabel, displayName),
-          draggable: !!acts[ai]._mapPinned,
+          draggable: isMapPin,
+          mapPin: isMapPin,
           title: seqLabel + " " + displayName,
+          autoPan: false,
         }).bindPopup(
           `<strong>${escapeHtml(seqLabel)} · ${escapeHtml(
             acts[ai].time || ""
@@ -857,9 +880,32 @@
             acts[ai].note || ""
           )}</span>`
         );
-        if (acts[ai]._mapPinned) {
+        if (isMapPin) {
           const actRef = acts[ai];
+          // 默认锁定
+          if (mk.dragging) {
+            if (pickModeOn) mk.dragging.enable();
+            else mk.dragging.disable();
+          }
+          mk.on("dragstart", function (e) {
+            if (!pickModeOn) {
+              // 双重保险：非选点模式禁止拖
+              try {
+                if (mk.dragging) mk.dragging.disable();
+              } catch (_) {}
+              if (e && e.target && e.target._latlng) {
+                /* noop */
+              }
+            }
+          });
           mk.on("dragend", function () {
+            if (!pickModeOn) {
+              // 若误拖，弹回原坐标
+              try {
+                mk.setLatLng([actRef.lat, actRef.lng]);
+              } catch (_) {}
+              return;
+            }
             const ll = mk.getLatLng();
             actRef.lat = ll.lat;
             actRef.lng = ll.lng;
@@ -868,7 +914,12 @@
               try {
                 global.dispatchEvent(
                   new CustomEvent("travel-map-pin-moved", {
-                    detail: { dayIndex: di, actIndex: ai, lat: ll.lat, lng: ll.lng },
+                    detail: {
+                      dayIndex: di,
+                      actIndex: ai,
+                      lat: ll.lat,
+                      lng: ll.lng,
+                    },
                   })
                 );
               } catch (_) {}

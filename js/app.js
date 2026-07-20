@@ -1050,8 +1050,8 @@
     const foot = $("map-footnote");
     if (foot) {
       foot.textContent = on
-        ? "选点中：点击地图添加站点到所选日 · 地图钉点可拖拽微调"
-        : "开启「选点」后点击地图，将坐标加入所选日。免费 OSM 瓦片 · 非商用导航。";
+        ? "选点中：点空白处添加站点 · 仅此时可拖动已有钉点微调 · 关掉「选点」后钉点锁定"
+        : "地图内搜索景点，或勾选「选点」加点。平时钉点锁定防误触，只能删除/再添加。";
     }
     if (!on) {
       TravelMap.setPickMode(false);
@@ -4237,9 +4237,11 @@
     window.addEventListener("travel-map-pin-moved", () => {
       const t = activeTrip();
       if (!t) return;
+      // 仅选点模式下会触发有效拖动
+      if (!$("chk-map-pick") || !$("chk-map-pick").checked) return;
       touch(t);
       updateRouteStats(t);
-      toast("钉点已更新");
+      toast("钉点位置已更新（选点模式）");
     });
 
     const btnOptAll = $("btn-optimize-all");
