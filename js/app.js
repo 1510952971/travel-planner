@@ -4315,57 +4315,96 @@
       });
     }
 
-    // 地图搜索框
+    // 地图内地点搜索（POI / 道路 / 城市，偏置当前地图中心）
     async function runMapSearch() {
       const input = $("map-search-input");
       const box = $("map-search-results");
-      if (!input || !box || !window.TravelMap || !TravelMap.searchPlaces) return;
+      if (!input || !box || !window.TravelMap || !TravelMap.searchPlaces) {
+        toast("地图搜索未加载");
+        return;
+      }
       const q = input.value.trim();
-      if (q.length < 2) {
-        toast("输入至少 2 个字搜索");
+      if (q.length < 1) {
+        toast("请输入要搜索的地点，如：西湖、雷峰塔、外滩");
         return;
       }
       box.hidden = false;
-      box.innerHTML = '<div class="map-search-item"><small>搜索中…</small></div>';
+      box.innerHTML =
+        '<div class="map-search-item"><small>正在地图中搜索「' +
+        escapeHtml(q) +
+        "」…</small></div>";
+      if (TravelMap.clearSearchMarkers) TravelMap.clearSearchMarkers();
+
       const t = activeTrip();
       const di = Number($("map-pick-day") && $("map-pick-day").value) || 0;
       const bias =
         t && t.days && t.days[di]
           ? dayCityOf(t, t.days[di])
           : primaryCity(t) || "";
+
       let list = [];
       try {
-        list = await TravelMap.searchPlaces(q, bias);
-      } catch (_) {}
+        list = await TravelMap.searchPlaces(q, bias, { nearMap: true });
+      } catch (err) {
+        console.warn(err);
+      }
       mapSearchHit = null;
       if (!list.length) {
         box.innerHTML =
-          '<div class="map-search-item"><small>没有结果，可换关键词或直接「选点」</small></div>';
+          '<div class="map-search-item"><small>没有找到「' +
+          escapeHtml(q) +
+          "」。可先缩放/平移地图到目标城市再搜，或勾选「选点」直接点地图。</small></div>";
+        toast("未找到地点，试试加城市名：如 杭州 西湖");
         return;
       }
+
+      function selectHit(hit, index) {
+        mapSearchHit = hit;
+        box.querySelectorAll(".map-search-item").forEach((el, j) => {
+          el.classList.toggle("is-active", j === index);
+        });
+        TravelMap.flyTo(hit.lat, hit.lng, 16);
+        toast("已定位：" + (hit.name || hit.label));
+      }
+
       box.innerHTML = "";
+      const tip = document.createElement("div");
+      tip.className = "map-search-item";
+      tip.innerHTML =
+        "<small>找到 " +
+        list.length +
+        " 处 · 点列表或地图粉点定位 · 再点「加入当日」</small>";
+      tip.style.cursor = "default";
+      box.appendChild(tip);
+
       list.forEach((hit, i) => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "map-search-item" + (i === 0 ? " is-active" : "");
+        const typeBit = hit.type ? " · " + hit.type : "";
         btn.innerHTML =
+          "<strong>" +
+          (i + 1) +
+          ". " +
           escapeHtml(hit.name || hit.label) +
-          "<small>" +
+          "</strong><small>" +
           escapeHtml(hit.label || "") +
+          escapeHtml(typeBit) +
           "</small>";
-        btn.addEventListener("click", () => {
-          box.querySelectorAll(".map-search-item").forEach((el) =>
-            el.classList.remove("is-active")
-          );
-          btn.classList.add("is-active");
-          mapSearchHit = hit;
-          TravelMap.flyTo(hit.lat, hit.lng, 15);
-          toast("已定位：" + (hit.name || hit.label));
-        });
+        btn.addEventListener("click", () => selectHit(hit, i));
         box.appendChild(btn);
       });
+
       mapSearchHit = list[0];
-      TravelMap.flyTo(list[0].lat, list[0].lng, 14);
+      if (TravelMap.showSearchMarkers) {
+        TravelMap.showSearchMarkers(list, (hit) => {
+          const idx = list.indexOf(hit);
+          selectHit(hit, idx >= 0 ? idx : 0);
+        });
+      } else {
+        TravelMap.flyTo(list[0].lat, list[0].lng, 15);
+      }
+      toast("找到 " + list.length + " 个地点");
     }
 
     function addMapSearchHitToDay() {
@@ -4375,7 +4414,7 @@
         return;
       }
       if (!mapSearchHit) {
-        toast("请先搜索并点选一个结果");
+        toast("请先搜索地点，并在结果里点选一项");
         return;
       }
       if (!t.days || !t.days.length) {
@@ -4402,6 +4441,7 @@
       state.openDays[di] = true;
       renderDays(t);
       renderOverview(t);
+      if (TravelMap.clearSearchMarkers) TravelMap.clearSearchMarkers();
       scheduleMapRefresh(true, di);
       const box = $("map-search-results");
       if (box) box.hidden = true;
@@ -4421,6 +4461,25 @@
           e.preventDefault();
           runMapSearch();
         }
+      });
+      // 输入时短防抖自动搜（更像地图内搜索）
+      let mapSearchTimer = null;
+      $("map-search-input").addEventListener("input", () => {
+        clearTimeout(mapSearchTimer);
+        const q = $("map-search-input").value.trim();
+        if (q.length < 2) {
+          const box = $("map-search-results");
+          if (box) {
+            box.hidden = true;
+            box.innerHTML = "";
+          }
+          if (window.TravelMap && TravelMap.clearSearchMarkers) {
+            TravelMap.clearSearchMarkers();
+          }
+          mapSearchHit = null;
+          return;
+        }
+        mapSearchTimer = setTimeout(runMapSearch, 550);
       });
     }
 

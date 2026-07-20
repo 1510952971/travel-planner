@@ -58,6 +58,8 @@
   let pickClickHandler = null;
   let pickModeOn = false;
   let baseLayers = null;
+  /** 搜索结果临时图层（粉点） */
+  let searchLayer = null;
 
   /** 示意安全提示圈（非真实犯罪热力） */
   const CAUTION_ZONES = {
@@ -368,44 +370,182 @@
     });
   }
 
-  /** 地点搜索（Open-Meteo + Nominatim，中文优先） */
-  async function searchPlaces(query, biasCity) {
+  function pushUniqueResult(results, hit) {
+    if (!hit || hit.lat == null || hit.lng == null) return;
+    if (
+      results.some(
+        (x) =>
+          Math.abs(x.lat - hit.lat) < 0.0004 && Math.abs(x.lng - hit.lng) < 0.0004
+      )
+    ) {
+      return;
+    }
+    results.push(hit);
+  }
+
+  /**
+   * 在地图里搜地点（景点/道路/城市）
+   * 优先 Photon（支持中文 POI）+ 当前地图中心偏置，再补 Open-Meteo / Nominatim
+   * @param {string} query
+   * @param {string} [biasCity]
+   * @param {{ nearMap?: boolean }} [opts]
+   */
+  async function searchPlaces(query, biasCity, opts) {
+    opts = opts || {};
     const q = String(query || "").trim();
-    if (q.length < 2) return [];
+    if (q.length < 1) return [];
     const results = [];
     const hint =
       global.TravelCityCatalog && global.TravelCityCatalog.geocodeHint
         ? global.TravelCityCatalog.geocodeHint(biasCity || "")
         : biasCity || "";
-    const qFull = hint ? q + " " + hint : q;
+    // 查询串：关键词 + 城市偏置（利于「西湖」「雷峰塔」）
+    const qWithCity = hint ? q + " " + (biasCity || hint) : q;
 
+    const m = ensureMap();
+    let lat0 = null;
+    let lng0 = null;
+    let bbox = null;
+    if (m && opts.nearMap !== false) {
+      try {
+        const c = m.getCenter();
+        lat0 = c.lat;
+        lng0 = c.lng;
+        const b = m.getBounds();
+        // photon: minLon,minLat,maxLon,maxLat
+        bbox = [
+          b.getWest(),
+          b.getSouth(),
+          b.getEast(),
+          b.getNorth(),
+        ].join(",");
+      } catch (_) {}
+    }
+    // 无地图时用城市中心偏置
+    if (lat0 == null && biasCity) {
+      const cc = cityCenter(biasCity);
+      lat0 = cc[0];
+      lng0 = cc[1];
+    }
+
+    // 1) Photon — 浏览器可跨域，中文景点友好
+    try {
+      let url =
+        "https://photon.komoot.io/api/?limit=10&lang=default&q=" +
+        encodeURIComponent(qWithCity);
+      if (lat0 != null && lng0 != null) {
+        url += "&lat=" + encodeURIComponent(lat0) + "&lon=" + encodeURIComponent(lng0);
+      }
+      // 不强制 bounded，避免视野外景点搜不到；有中心偏置即可
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        (data.features || []).forEach((f) => {
+          const g = f.geometry && f.geometry.coordinates;
+          const p = f.properties || {};
+          if (!g || g.length < 2) return;
+          const lng = Number(g[0]);
+          const lat = Number(g[1]);
+          const name = p.name || p.street || p.city || q;
+          const parts = [
+            p.name,
+            p.street,
+            p.district || p.locality,
+            p.city || p.town || p.village,
+            p.state,
+            p.country,
+          ].filter(Boolean);
+          const uniq = [];
+          parts.forEach((x) => {
+            if (uniq.indexOf(x) < 0) uniq.push(x);
+          });
+          pushUniqueResult(results, {
+            name: name,
+            label: uniq.join(" · ") || name,
+            lat: lat,
+            lng: lng,
+            type: p.osm_value || p.type || "",
+            source: "photon",
+          });
+        });
+      }
+    } catch (_) {}
+
+    // 2) 仅关键词再搜一遍 Photon（避免加城市后反而无结果）
+    if (results.length < 2 && qWithCity !== q) {
+      try {
+        let url =
+          "https://photon.komoot.io/api/?limit=8&lang=default&q=" +
+          encodeURIComponent(q);
+        if (lat0 != null && lng0 != null) {
+          url +=
+            "&lat=" + encodeURIComponent(lat0) + "&lon=" + encodeURIComponent(lng0);
+        }
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          (data.features || []).forEach((f) => {
+            const g = f.geometry && f.geometry.coordinates;
+            const p = f.properties || {};
+            if (!g) return;
+            pushUniqueResult(results, {
+              name: p.name || q,
+              label: [p.name, p.city, p.state, p.country].filter(Boolean).join(" · "),
+              lat: Number(g[1]),
+              lng: Number(g[0]),
+              type: p.osm_value || "",
+              source: "photon",
+            });
+          });
+        }
+      } catch (_) {}
+    }
+
+    // 3) Open-Meteo：城市/区划
     try {
       const url =
-        "https://geocoding-api.open-meteo.com/v1/search?count=6&language=zh&name=" +
-        encodeURIComponent(qFull);
+        "https://geocoding-api.open-meteo.com/v1/search?count=5&language=zh&name=" +
+        encodeURIComponent(qWithCity);
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         (data.results || []).forEach((r) => {
-          results.push({
+          pushUniqueResult(results, {
             name: r.name || q,
             label: [r.name, r.admin2, r.admin1, r.country]
               .filter(Boolean)
               .join(" · "),
             lat: r.latitude,
             lng: r.longitude,
+            type: "place",
             source: "open-meteo",
           });
         });
       }
     } catch (_) {}
 
+    // 4) Nominatim 兜底（部分环境 CORS 可用）
     if (results.length < 3) {
       try {
-        const url =
-          "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=zh-CN&q=" +
-          encodeURIComponent(qFull || q);
-        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        let url =
+          "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&addressdetails=1&accept-language=zh-CN&q=" +
+          encodeURIComponent(qWithCity);
+        if (bbox) {
+          url +=
+            "&viewbox=" +
+            encodeURIComponent(
+              bbox.split(",")[0] +
+                "," +
+                bbox.split(",")[3] +
+                "," +
+                bbox.split(",")[2] +
+                "," +
+                bbox.split(",")[1]
+            );
+        }
+        const res = await fetch(url, {
+          headers: { Accept: "application/json" },
+        });
         if (res.ok) {
           const data = await res.json();
           (data || []).forEach((r) => {
@@ -413,20 +553,75 @@
             const lng = Number(r.lon);
             if (Number.isNaN(lat)) return;
             const label = r.display_name || r.name || q;
-            if (results.some((x) => Math.abs(x.lat - lat) < 0.0005 && Math.abs(x.lng - lng) < 0.0005))
-              return;
-            results.push({
+            pushUniqueResult(results, {
               name: r.name || label.split(",")[0],
               label: label,
-              lat,
-              lng,
+              lat: lat,
+              lng: lng,
+              type: r.type || r.class || "",
               source: "nominatim",
             });
           });
         }
       } catch (_) {}
     }
-    return results.slice(0, 8);
+
+    // 距地图中心近的排前面
+    if (lat0 != null && lng0 != null) {
+      results.sort((a, b) => {
+        const da = haversineKm([lat0, lng0], [a.lat, a.lng]);
+        const db = haversineKm([lat0, lng0], [b.lat, b.lng]);
+        return da - db;
+      });
+    }
+
+    return results.slice(0, 10);
+  }
+
+  /** 在地图上画搜索结果粉点 */
+  function showSearchMarkers(results, onSelect) {
+    const m = ensureMap();
+    if (!m) return;
+    if (!searchLayer) searchLayer = L.layerGroup().addTo(m);
+    searchLayer.clearLayers();
+    const pts = [];
+    (results || []).forEach((r, i) => {
+      if (r.lat == null) return;
+      pts.push([r.lat, r.lng]);
+      const mk = L.circleMarker([r.lat, r.lng], {
+        radius: 9,
+        color: "#ff2e93",
+        weight: 2,
+        fillColor: "#ff2e93",
+        fillOpacity: 0.75,
+      });
+      mk.bindTooltip(
+        (i + 1) + ". " + (r.name || "地点"),
+        { permanent: false, direction: "top" }
+      );
+      mk.bindPopup(
+        "<strong>" +
+          escapeHtml(r.name || "") +
+          "</strong><br/><span style='opacity:.75'>" +
+          escapeHtml(r.label || "") +
+          "</span>"
+      );
+      mk.on("click", function () {
+        if (typeof onSelect === "function") onSelect(r, i);
+      });
+      searchLayer.addLayer(mk);
+    });
+    if (pts.length === 1) {
+      m.setView(pts[0], 16, { animate: true });
+    } else if (pts.length > 1) {
+      try {
+        m.fitBounds(L.latLngBounds(pts).pad(0.2));
+      } catch (_) {}
+    }
+  }
+
+  function clearSearchMarkers() {
+    if (searchLayer) searchLayer.clearLayers();
   }
 
   function flyTo(lat, lng, zoom) {
@@ -821,6 +1016,8 @@
     geocode,
     reverseGeocode,
     searchPlaces,
+    showSearchMarkers,
+    clearSearchMarkers,
     flyTo,
     cleanPlaceName,
     shortPlaceLabel,

@@ -2410,11 +2410,12 @@ textarea {
 
 .map-search-results {
   flex: 0 0 auto;
-  max-height: 140px;
+  max-height: 168px;
   overflow-y: auto;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
   scrollbar-width: thin;
+  z-index: 5;
 }
 
 .map-search-results[hidden] {

@@ -274,15 +274,15 @@
                 </div>
               </div>
               <div class="map-search-bar">
-                <input type="search" id="map-search-input" class="map-search-input" placeholder="搜索地点（中文）…" autocomplete="off" />
+                <input type="search" id="map-search-input" class="map-search-input" placeholder="在地图中搜：西湖 / 雷峰塔 / 外滩…" autocomplete="off" enterkeyhint="search" />
                 <button type="button" class="btn btn-ghost btn-sm" id="map-search-go">搜索</button>
-                <button type="button" class="btn btn-primary btn-sm" id="map-search-add" title="将搜索结果或当前定位加入所选日">加入当日</button>
+                <button type="button" class="btn btn-primary btn-sm" id="map-search-add" title="将当前选中的搜索结果加入所选日">加入当日</button>
               </div>
               <div id="map-search-results" class="map-search-results" hidden></div>
-              <div id="trip-map" class="trip-map" role="img" aria-label="行程地图，可搜索与选点"></div>
+              <div id="trip-map" class="trip-map" role="img" aria-label="行程地图，可搜索地点与选点"></div>
               <div id="day-km-list" class="day-km-list"></div>
               <p class="map-footnote" id="map-footnote">
-                中文底图可切换（右上图层）· 搜索或「选点」加点 · 右侧改地点会自动同步到地图 · 标记为 D日-序号 + 地名
+                地图内搜索：输入景点/道路名 → 列表与粉色圆点 → 点选 →「加入当日」。也可勾选「选点」直接点地图。右上角可切换中文底图。
               </p>
             </div>
             <div class="timeline-pane">
