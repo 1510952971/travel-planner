@@ -97,46 +97,84 @@
           </div>
         </header>
 
-        <!-- ② 城市 + 时间：置顶配置卡片（在概览/各 Tab 之上） -->
+        <!-- ② AI 路线配置：智能输入 + 路由卡片 + 灵感 pills -->
         <aside class="config-bar" id="config-rail" aria-label="行程参数配置">
           <div class="config-bar-card">
             <div class="config-bar-main">
-              <div class="dest-field">
-                <div class="config-bar-title-row">
-                  <span class="dest-field-label">路线站序 <em>省·市·县 · 可重复途经</em></span>
-                  <div class="config-bar-title-actions">
-                    <div class="route-mode-row" id="route-mode-row">
-                      <span class="route-mode-label">路线</span>
-                      <label class="route-mode-opt"><input type="radio" name="route-mode" value="linear" checked /> 线性</label>
-                      <label class="route-mode-opt"><input type="radio" name="route-mode" value="loop" /> 环线</label>
-                    </div>
-                    <button type="button" class="btn btn-ghost btn-sm" id="btn-config-collapse" title="折叠配置，腾出下方空间" aria-expanded="true">▴ 收起</button>
+              <div class="config-bar-title-row">
+                <span class="dest-field-label">智能路线 <em>一句话生成站序</em></span>
+                <div class="config-bar-title-actions">
+                  <div class="route-mode-row" id="route-mode-row">
+                    <span class="route-mode-label">路线</span>
+                    <label class="route-mode-opt"><input type="radio" name="route-mode" value="linear" checked /> 线性</label>
+                    <label class="route-mode-opt"><input type="radio" name="route-mode" value="loop" /> 环线</label>
+                  </div>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btn-config-collapse" title="折叠配置" aria-expanded="true">▴ 收起</button>
+                </div>
+              </div>
+
+              <div class="config-bar-body" id="config-bar-body">
+                <!-- AI 万能输入 -->
+                <div class="route-ai-shell" id="route-ai-shell">
+                  <span class="route-ai-icon" aria-hidden="true">✦</span>
+                  <input
+                    type="text"
+                    id="route-ai-input"
+                    class="route-ai-input"
+                    placeholder="💡 输入你的旅行想法，例如：从上海出发去金华和义乌，最后去台北特种兵特游"
+                    autocomplete="off"
+                  />
+                  <!-- 兼容旧 id：隐藏的 manual 输入由脚本同步 -->
+                  <input type="hidden" id="trip-dest-input" />
+                  <button type="button" class="route-ai-btn" id="btn-route-ai-parse" title="AI 解析路线">
+                    <span class="route-ai-btn-glow"></span>
+                    <span class="route-ai-btn-text">✨ AI 解析</span>
+                  </button>
+                </div>
+
+                <!-- 结构化路线链条 -->
+                <div class="route-chain-wrap">
+                  <div class="route-chain" id="route-chain" aria-label="路线站序卡片">
+                    <div class="route-chain-empty" id="route-chain-empty">解析后这里会出现站点卡片 · 也可点下方灵感快速加入</div>
                   </div>
                 </div>
-                <div class="config-bar-body" id="config-bar-body">
-                  <div class="dest-path-preview" id="dest-path-preview">尚未选择城市</div>
-                  <div class="dest-chips" id="dest-chips" aria-label="路线站序"></div>
-                  <div class="dest-pick-label">点选省·市；「▾县」选下辖县市</div>
-                  <div class="dest-pick-grid" id="dest-pick-grid" role="group" aria-label="常用城市多选"></div>
-                  <div class="dest-add-row">
-                    <input id="trip-dest-input" list="dest-suggest" placeholder="手写：浙江·金华·义乌" autocomplete="off" />
-                    <button type="button" class="btn btn-primary btn-sm" id="btn-add-dest">加入</button>
+                <!-- 兼容旧逻辑：隐藏 chips 容器供脚本复用 id -->
+                <div id="dest-chips" class="hidden" aria-hidden="true"></div>
+                <div id="dest-path-preview" class="hidden" aria-hidden="true"></div>
+                <div id="dest-pick-grid" class="hidden" aria-hidden="true"></div>
+
+                <!-- 灵感推荐（克制两行 pills） -->
+                <div class="inspire-pills" id="inspire-pills">
+                  <div class="inspire-pills-row">
+                    <span class="inspire-pills-lab">✨ 摄影师推荐</span>
+                    <button type="button" class="inspire-pill" data-route="四川·成都 → 四川·成都·都江堰 → 云南·丽江">川西光影</button>
+                    <button type="button" class="inspire-pill" data-route="新疆·乌鲁木齐">新疆夏牧场</button>
+                    <button type="button" class="inspire-pill" data-route="日本·京都 → 日本·大阪">京都枫叶</button>
                   </div>
-                  <div class="config-meta-grid">
-                    <label>出发 <input type="date" id="trip-start" /></label>
-                    <label>返回 <input type="date" id="trip-end" /></label>
-                    <label>人数 <input type="number" id="trip-people" min="1" value="1" /></label>
-                    <label>偏好
-                      <select id="trip-style">
-                        <option value="balanced">均衡游</option>
-                        <option value="deep">深度游</option>
-                        <option value="rush">特种兵</option>
-                        <option value="family">亲子</option>
-                        <option value="food">美食向</option>
-                        <option value="photo">拍照打卡</option>
-                      </select>
-                    </label>
+                  <div class="inspire-pills-row">
+                    <span class="inspire-pills-lab">🚄 周边快捷</span>
+                    <button type="button" class="inspire-pill" data-city="浙江·杭州">杭州</button>
+                    <button type="button" class="inspire-pill" data-city="江苏·苏州">苏州</button>
+                    <button type="button" class="inspire-pill" data-city="江苏·南京">南京</button>
+                    <button type="button" class="inspire-pill" data-city="浙江·金华">金华</button>
+                    <button type="button" class="inspire-pill" data-city="浙江·金华·义乌">义乌</button>
                   </div>
+                </div>
+
+                <div class="config-meta-grid">
+                  <label>出发 <input type="date" id="trip-start" /></label>
+                  <label>返回 <input type="date" id="trip-end" /></label>
+                  <label>人数 <input type="number" id="trip-people" min="1" value="1" /></label>
+                  <label>偏好
+                    <select id="trip-style">
+                      <option value="balanced">均衡游</option>
+                      <option value="deep">深度游</option>
+                      <option value="rush">特种兵</option>
+                      <option value="family">亲子</option>
+                      <option value="food">美食向</option>
+                      <option value="photo">拍照打卡</option>
+                    </select>
+                  </label>
                 </div>
               </div>
             </div>
@@ -499,7 +537,8 @@
         <div>复制摘要</div><div>可粘贴到微信的纯文本行程</div>
         <div>多城行程</div><div>站序「省·市」或「省·市·县」（浙江·金华·义乌）；▾县 展开下辖；可重复途经</div>
         <div>侧栏</div><div>点品牌旁 ⟨ 收起；左缘 ⟩ 或按键 <kbd>[</kbd> 展开/切换</div>
-        <div>配置区</div><div>「▴ 收起」折叠站序卡片，腾出概览/地图空间</div>
+        <div>配置区</div><div>「▴ 收起」折叠配置；「✨ AI 解析」一句话生成站序卡片</div>
+        <div>路线卡片</div><div>水平滑动查看站点；× 删除；拖拽卡片调顺序</div>
         <div>地图选点</div><div>日程页勾选「选点」后点地图；钉点可拖；站点 ↗ 打开导航</div>
         <div>地图筛选</div><div>「地图显示」下拉：全部日 / 仅某一天</div>
         <div>日历导出</div><div>顶栏「日历」导出 ICS，可导入系统日历</div>

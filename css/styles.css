@@ -1589,21 +1589,308 @@ html.photo-mode .gacha-card::before {
 .config-bar-main {
   flex: none;
   height: auto;
-  overflow: visible; /* 解除配置区独立滚动条 */
-  padding: 12px 16px 14px;
+  overflow: visible;
+  padding: 14px 16px 16px;
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+/* —— AI 智能路线搜索框（Glassmorphism） —— */
+.route-ai-shell {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 16px;
+  background: rgba(18, 18, 22, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  transition: border-color 0.2s, box-shadow 0.35s;
+  position: relative;
 }
 
-.config-bar .dest-pick-grid {
-  min-height: 0;
-  max-height: none;
-  align-content: flex-start;
+.route-ai-shell:focus-within {
+  border-color: rgba(0, 240, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(0, 240, 255, 0.35),
+    0 0 24px rgba(0, 240, 255, 0.22),
+    0 8px 32px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: route-ai-breathe 2.4s ease-in-out infinite;
 }
 
-.config-bar .dest-chips {
-  min-height: 36px;
+@keyframes route-ai-breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(0, 240, 255, 0.3),
+      0 0 18px rgba(0, 240, 255, 0.16),
+      0 8px 32px rgba(0, 0, 0, 0.28);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(0, 240, 255, 0.5),
+      0 0 32px rgba(0, 240, 255, 0.28),
+      0 8px 32px rgba(0, 0, 0, 0.28);
+  }
+}
+
+.route-ai-icon {
+  flex: 0 0 auto;
+  color: #00f0ff;
+  font-size: 1.05rem;
+  opacity: 0.9;
+  text-shadow: 0 0 12px rgba(0, 240, 255, 0.6);
+}
+
+.route-ai-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--text);
+  padding: 10px 4px;
+}
+
+.route-ai-input::placeholder {
+  color: var(--muted);
+  opacity: 0.85;
+  font-weight: 400;
+}
+
+.route-ai-btn {
+  position: relative;
+  flex: 0 0 auto;
+  border: none;
+  cursor: pointer;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: #061018;
+  background: linear-gradient(135deg, #00f0ff 0%, #6c8cff 55%, #ff2e93 120%);
+  box-shadow: 0 4px 16px rgba(0, 240, 255, 0.28);
+  overflow: hidden;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.route-ai-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(0, 240, 255, 0.4);
+}
+
+.route-ai-btn:active {
+  transform: translateY(0);
+}
+
+.route-ai-btn.is-parsing {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.route-ai-btn-text {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+.route-ai-btn-glow {
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(
+    120deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 70%
+  );
+  animation: route-ai-shine 2.8s ease-in-out infinite;
+}
+
+@keyframes route-ai-shine {
+  0% { transform: translateX(-40%) rotate(12deg); }
+  100% { transform: translateX(40%) rotate(12deg); }
+}
+
+/* —— 路线链条 Route Chain —— */
+.route-chain-wrap {
+  margin-top: 2px;
+}
+
+.route-chain {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 2px 10px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 240, 255, 0.35) transparent;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+
+.route-chain::-webkit-scrollbar {
+  height: 6px;
+}
+.route-chain::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.3);
+  border-radius: 999px;
+}
+
+.route-chain-empty {
+  width: 100%;
+  padding: 16px 14px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--muted);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.route-station {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 108px;
+  max-width: 148px;
+  padding: 12px 14px 10px;
+  border-radius: 14px;
+  background: rgba(12, 14, 18, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  scroll-snap-align: start;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.route-station:hover {
+  border-color: rgba(0, 240, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.route-station.is-dragging {
+  opacity: 0.45;
+  transform: scale(0.96);
+}
+
+.route-station.is-drag-over {
+  border-color: rgba(0, 240, 255, 0.65);
+  box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.25);
+}
+
+.route-station-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  margin-right: 12px;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.route-station-meta {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.route-station-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.route-station-x:hover {
+  background: rgba(232, 93, 93, 0.2);
+  color: #ff7b7b;
+}
+
+.route-arrow {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 0 8px;
+  color: rgba(154, 154, 168, 0.85);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* —— 灵感 pills —— */
+.inspire-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.inspire-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.inspire-pills-lab {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-right: 2px;
+  white-space: nowrap;
+}
+
+.inspire-pill {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.inspire-pill:hover {
+  border-color: rgba(0, 240, 255, 0.45);
+  background: rgba(0, 240, 255, 0.1);
+  color: #00f0ff;
+}
+
+/* 浅色主题下 AI 壳适配 */
+:root:not([data-theme="dark"]) .route-ai-shell {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(18, 18, 20, 0.1);
+}
+
+:root:not([data-theme="dark"]) .route-station {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(18, 18, 20, 0.08);
+}
+
+:root:not([data-theme="dark"]) .inspire-pill {
+  background: rgba(18, 18, 20, 0.03);
+  border-color: rgba(18, 18, 20, 0.1);
 }
 
 .config-bar-title-row {

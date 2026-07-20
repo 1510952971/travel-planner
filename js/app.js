@@ -345,191 +345,46 @@
   }
 
   function updateDestPathPreview(t) {
-    const el = $("dest-path-preview");
-    if (!el) return;
-    const list = getDestinations(t);
-    if (!list.length) {
-      el.textContent =
-        "尚未选择 · 点选 省·市，或 ▾县 选下辖县市（可 浙江·金华·义乌）";
-      el.classList.add("is-empty");
-      return;
-    }
-    const uniq = uniqueCitiesOf(list).length;
-    const revisit = list.length > uniq;
-    el.textContent =
-      list.join(" → ") +
-      "  ·  " +
-      list.length +
-      " 站" +
-      (uniq !== list.length ? " / " + uniq + " 城" : "") +
-      (revisit ? "（含重复途经）" : "");
-    el.classList.remove("is-empty");
+    /* 路径预览已并入 route-chain 卡片，保留空函数兼容调用 */
+    void t;
   }
 
+  /** 展示用短名：浙江·金华·义乌 → 义乌 */
+  function displayCityShort(label) {
+    if (window.TravelCityCatalog && TravelCityCatalog.displayShort) {
+      const r = TravelCityCatalog.resolvePlace
+        ? TravelCityCatalog.resolvePlace(label)
+        : null;
+      if (r && r.county) return r.county;
+      if (r && r.city) return r.city;
+    }
+    const parts = String(label || "")
+      .split("·")
+      .filter(Boolean);
+    if (parts.length >= 2) return parts[parts.length - 1];
+    return label || "";
+  }
+
+  function allocateDisplayDays(totalDays, n) {
+    if (n <= 0) return [];
+    const days = Math.max(n, Number(totalDays) || n);
+    const base = Math.floor(days / n);
+    let rem = days % n;
+    const arr = [];
+    for (let i = 0; i < n; i++) {
+      let d = Math.max(1, base);
+      if (rem > 0) {
+        d++;
+        rem--;
+      }
+      arr.push(d);
+    }
+    return arr;
+  }
+
+  /** 极简灵感区：静态 HTML，无需再渲染全国标签 */
   function renderDestPickGrid(t) {
-    const grid = $("dest-pick-grid");
-    if (!grid) return;
-    const list = getDestinations(t);
-    const countMap = {};
-    list.forEach((c) => {
-      countMap[c] = (countMap[c] || 0) + 1;
-    });
-
-    // 主列表：常用 + 地级市（不含县，县走展开）
-    let picks = DEFAULT_CITY_PICKS.slice();
-    if (window.TravelCityCatalog && TravelCityCatalog.listPrefectureLabels) {
-      TravelCityCatalog.listPrefectureLabels().forEach((lab) => {
-        if (!picks.includes(lab)) picks.push(lab);
-      });
-    }
-    const showAll = grid.dataset.expanded === "1";
-    const primary = picks.slice(0, 24);
-    const rest = picks.slice(24);
-    const visible = showAll ? picks : primary;
-
-    grid.innerHTML = "";
-
-    function makePickBtn(city, opts) {
-      opts = opts || {};
-      const n = countMap[city] || 0;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className =
-        "dest-pick-btn" +
-        (n > 0 ? " is-on" : "") +
-        (opts.sub ? " is-county" : "") +
-        (opts.parent && destCountyExpand === opts.parent ? " is-expand-parent" : "");
-      btn.textContent = opts.short
-        ? opts.short + (n > 1 ? " ×" + n : "")
-        : n > 1
-          ? city + " ×" + n
-          : city;
-      btn.title = opts.title || city;
-      btn.addEventListener("click", () => {
-        const cur = activeTrip();
-        if (!cur) {
-          toast("请先打开或创建行程");
-          return;
-        }
-        if (opts.onClick) {
-          opts.onClick(cur, city);
-          return;
-        }
-        appendDestinationStop(cur, city);
-      });
-      return btn;
-    }
-
-    visible.forEach((city) => {
-      const hasSub =
-        window.TravelCityCatalog &&
-        TravelCityCatalog.hasCounties &&
-        TravelCityCatalog.hasCounties(city);
-      // 本身已是 省·市·县 的常用项：直接追加
-      const isCountyLabel = (city.match(/·/g) || []).length >= 2;
-
-      if (hasSub && !isCountyLabel) {
-        // 地级市：左键追加全市；也可展开下级县市
-        const wrap = document.createElement("span");
-        wrap.className = "dest-pick-combo";
-        const main = makePickBtn(city, {
-          title: "点击加入「" + city + "」；右侧 ▾ 展开下辖县市",
-        });
-        const exp = document.createElement("button");
-        exp.type = "button";
-        exp.className =
-          "dest-pick-btn dest-pick-expand" +
-          (destCountyExpand === city ? " is-open" : "");
-        exp.textContent = destCountyExpand === city ? "▴" : "▾县";
-        exp.title = "展开/收起下辖县市";
-        exp.addEventListener("click", (e) => {
-          e.stopPropagation();
-          destCountyExpand = destCountyExpand === city ? "" : city;
-          renderDestPickGrid(t);
-        });
-        wrap.append(main, exp);
-        grid.appendChild(wrap);
-      } else {
-        grid.appendChild(
-          makePickBtn(city, {
-            title: "点击加入 " + city,
-          })
-        );
-      }
-    });
-
-    // 展开的下辖县市条
-    if (
-      destCountyExpand &&
-      window.TravelCityCatalog &&
-      TravelCityCatalog.listCountiesOf
-    ) {
-      const counties = TravelCityCatalog.listCountiesOf(destCountyExpand);
-      if (counties.length) {
-        const bar = document.createElement("div");
-        bar.className = "dest-county-bar";
-        const lab = document.createElement("span");
-        lab.className = "dest-county-lab";
-        lab.textContent = destCountyExpand + " · 下辖";
-        bar.appendChild(lab);
-        // 全市
-        bar.appendChild(
-          makePickBtn(destCountyExpand, {
-            short: "全市",
-            sub: true,
-            title: "加入地级市 " + destCountyExpand,
-          })
-        );
-        counties.forEach((item) => {
-          bar.appendChild(
-            makePickBtn(item.label, {
-              short: item.county,
-              sub: true,
-              title: "加入 " + item.label,
-            })
-          );
-        });
-        // 自定义县
-        const custom = document.createElement("button");
-        custom.type = "button";
-        custom.className = "dest-pick-btn is-county dest-pick-custom-county";
-        custom.textContent = "+ 其他县市";
-        custom.title = "手写下辖县/市名";
-        custom.addEventListener("click", () => {
-          const cur = activeTrip();
-          if (!cur) return;
-          const name = prompt(
-            "填写「" + destCountyExpand + "」下的县/县级市名称\n例如：义乌、东阳、兰溪",
-            ""
-          );
-          if (!name || !String(name).trim()) return;
-          const co = String(name).trim().replace(/(市|县|区)$/g, "");
-          // 拼 省·市·县
-          let full = destCountyExpand + "·" + co;
-          if (window.TravelCityCatalog && TravelCityCatalog.normalizeLabel) {
-            // 若目录有则规范；否则保留手写三级
-            const norm = TravelCityCatalog.normalizeLabel(full);
-            const r = TravelCityCatalog.resolvePlace(full);
-            full = r.known ? norm : full;
-          }
-          appendDestinationStop(cur, full);
-        });
-        bar.appendChild(custom);
-        grid.appendChild(bar);
-      }
-    }
-
-    if (rest.length) {
-      const more = document.createElement("button");
-      more.type = "button";
-      more.className = "dest-pick-btn dest-pick-more";
-      more.textContent = showAll ? "收起" : "更多地级市…";
-      more.addEventListener("click", () => {
-        grid.dataset.expanded = showAll ? "0" : "1";
-        renderDestPickGrid(t);
-      });
-      grid.appendChild(more);
-    }
+    void t;
   }
 
   function reorderDestinations(t, from, to) {
@@ -550,112 +405,197 @@
     return true;
   }
 
+  /** 渲染结构化路线卡片链条 */
   function renderDestChips(t) {
-    const box = $("dest-chips");
-    if (!box || !t) return;
+    if (!t) return;
     normalizeTrip(t);
     const list = t.destinations || [];
     updateDestPathPreview(t);
     renderDestPickGrid(t);
-    box.innerHTML = "";
-    list.forEach((city, i) => {
-      if (i > 0) {
-        const arr = document.createElement("span");
-        arr.className = "dest-arrow";
-        arr.textContent = "→";
-        arr.setAttribute("aria-hidden", "true");
-        box.appendChild(arr);
-      }
-      const chip = document.createElement("span");
-      chip.className = "dest-chip";
-      chip.draggable = true;
-      chip.dataset.index = String(i);
-      chip.title = "拖拽调整顺序";
 
-      const handle = document.createElement("span");
-      handle.className = "dest-chip-handle";
-      handle.textContent = "⋮⋮";
-      handle.setAttribute("aria-hidden", "true");
+    const chain = $("route-chain");
+    if (chain) {
+      chain.innerHTML = "";
+      if (!list.length) {
+        const empty = document.createElement("div");
+        empty.className = "route-chain-empty";
+        empty.textContent =
+          "解析后这里会出现站点卡片 · 也可点下方灵感快速加入";
+        chain.appendChild(empty);
+      } else {
+        const totalDays = dayCount(t.startDate, t.endDate) || list.length;
+        const dayAlloc = allocateDisplayDays(totalDays, list.length);
+        list.forEach((city, i) => {
+          if (i > 0) {
+            const arr = document.createElement("span");
+            arr.className = "route-arrow";
+            arr.textContent = "──›";
+            arr.setAttribute("aria-hidden", "true");
+            chain.appendChild(arr);
+          }
+          const card = document.createElement("div");
+          card.className = "route-station";
+          card.draggable = true;
+          card.dataset.index = String(i);
+          card.title = city + " · 拖拽可调整顺序";
 
-      const nameEl = document.createElement("span");
-      nameEl.className = "dest-chip-name";
-      const visitN = list.slice(0, i + 1).filter((c) => c === city).length;
-      const visitTotal = list.filter((c) => c === city).length;
-      nameEl.textContent =
-        visitTotal > 1 ? city + " ·" + visitN : city;
-      chip.title =
-        visitTotal > 1
-          ? city + "（第 " + visitN + " 次途经）· 拖拽排序"
-          : "拖拽调整顺序";
+          const nameEl = document.createElement("div");
+          nameEl.className = "route-station-name";
+          nameEl.textContent = displayCityShort(city);
+          nameEl.title = city;
 
-      const x = document.createElement("button");
-      x.type = "button";
-      x.className = "dest-chip-x";
-      x.setAttribute("aria-label", "移除本站 " + city);
-      x.textContent = "×";
-      x.draggable = false;
-      x.addEventListener("click", (e) => {
-        e.stopPropagation();
-        removeDestinationAt(t, i);
-        touch(t);
-        renderDestChips(t);
-        renderTripList();
-        weatherCacheKey = "";
-        loadWeather(true);
-        scheduleMapRefresh(true);
-      });
-      x.addEventListener("mousedown", (e) => e.stopPropagation());
-      x.addEventListener("pointerdown", (e) => e.stopPropagation());
+          const meta = document.createElement("div");
+          meta.className = "route-station-meta";
+          const visitN = list.slice(0, i + 1).filter((c) => c === city).length;
+          const visitTotal = list.filter((c) => c === city).length;
+          meta.textContent =
+            "第 " +
+            (i + 1) +
+            " 站 · 约 " +
+            dayAlloc[i] +
+            " 天" +
+            (visitTotal > 1 ? " · 第" + visitN + "次" : "");
 
-      chip.append(handle, nameEl, x);
+          const x = document.createElement("button");
+          x.type = "button";
+          x.className = "route-station-x";
+          x.setAttribute("aria-label", "移除 " + city);
+          x.textContent = "×";
+          x.draggable = false;
+          x.addEventListener("click", (e) => {
+            e.stopPropagation();
+            removeDestinationAt(t, i);
+            touch(t);
+            renderDestChips(t);
+            renderTripList();
+            weatherCacheKey = "";
+            loadWeather(true);
+            scheduleMapRefresh(true);
+          });
+          x.addEventListener("mousedown", (e) => e.stopPropagation());
 
-      chip.addEventListener("dragstart", (e) => {
-        destDragFrom = i;
-        chip.classList.add("is-dragging");
-        try {
-          e.dataTransfer.effectAllowed = "move";
-          e.dataTransfer.setData("text/plain", String(i));
-        } catch (_) {}
-      });
-      chip.addEventListener("dragend", () => {
-        destDragFrom = null;
-        box.querySelectorAll(".dest-chip").forEach((el) => {
-          el.classList.remove("is-dragging", "is-drag-over");
+          card.append(nameEl, meta, x);
+
+          card.addEventListener("dragstart", (e) => {
+            destDragFrom = i;
+            card.classList.add("is-dragging");
+            try {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", String(i));
+            } catch (_) {}
+          });
+          card.addEventListener("dragend", () => {
+            destDragFrom = null;
+            chain
+              .querySelectorAll(".route-station")
+              .forEach((el) =>
+                el.classList.remove("is-dragging", "is-drag-over")
+              );
+          });
+          card.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            card.classList.add("is-drag-over");
+          });
+          card.addEventListener("dragleave", () => {
+            card.classList.remove("is-drag-over");
+          });
+          card.addEventListener("drop", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            card.classList.remove("is-drag-over");
+            let from = destDragFrom;
+            try {
+              const raw = e.dataTransfer.getData("text/plain");
+              if (raw !== "" && raw != null) from = Number(raw);
+            } catch (_) {}
+            const to = Number(card.dataset.index);
+            if (Number.isFinite(from) && Number.isFinite(to)) {
+              reorderDestinations(t, from, to);
+            }
+            destDragFrom = null;
+          });
+
+          chain.appendChild(card);
         });
-      });
-      chip.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        try {
-          e.dataTransfer.dropEffect = "move";
-        } catch (_) {}
-        chip.classList.add("is-drag-over");
-      });
-      chip.addEventListener("dragleave", () => {
-        chip.classList.remove("is-drag-over");
-      });
-      chip.addEventListener("drop", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        chip.classList.remove("is-drag-over");
-        let from = destDragFrom;
-        try {
-          const raw = e.dataTransfer.getData("text/plain");
-          if (raw !== "" && raw != null) from = Number(raw);
-        } catch (_) {}
-        const to = Number(chip.dataset.index);
-        if (Number.isFinite(from) && Number.isFinite(to)) {
-          reorderDestinations(t, from, to);
-        }
-        destDragFrom = null;
-      });
+      }
+    }
 
-      box.appendChild(chip);
-    });
     const routeRow = $("route-mode-row");
     if (routeRow) routeRow.classList.toggle("is-multi", list.length >= 2);
     document.querySelectorAll('input[name="route-mode"]').forEach((r) => {
       r.checked = (t.routeMode || "linear") === r.value;
     });
+  }
+
+  /** AI 语义解析：一句话 → 站序 / 偏好 / 天数 / 环线 */
+  function runRouteAiParse() {
+    const t = activeTrip();
+    if (!t) {
+      toast("请先打开或创建行程");
+      return;
+    }
+    const input = $("route-ai-input");
+    const raw = (input && input.value.trim()) || "";
+    if (!raw) {
+      toast("写一句旅行想法，例如：上海去金华义乌再去台北");
+      return;
+    }
+    const btn = $("btn-route-ai-parse");
+    if (btn) btn.classList.add("is-parsing");
+
+    const parsed = parseInspirePrompt(raw);
+    let dests = (parsed.destinations || []).slice();
+    if (window.TravelGenerator && TravelGenerator.parseDestinations) {
+      const extra = TravelGenerator.parseDestinations({
+        destination: raw,
+      }).filter(Boolean);
+      // 合并：解析出的路径优先更长的
+      if (extra.length > dests.length) dests = extra;
+      else if (extra.length && !dests.length) dests = extra;
+    }
+    dests = dests
+      .map((d) => toProvinceCityLabel(d) || d)
+      .filter(Boolean);
+
+    if (!dests.length) {
+      toast("没识别到城市，试试：从上海出发去金华和义乌");
+      if (btn) btn.classList.remove("is-parsing");
+      return;
+    }
+
+    setDestinations(t, dests);
+    if (parsed.routeMode === "loop") t.routeMode = "loop";
+    else if (dests.length >= 2 && dests[0] === dests[dests.length - 1]) {
+      t.routeMode = "loop";
+    }
+    if (parsed.style) {
+      t.style = parsed.style;
+      if ($("trip-style")) $("trip-style").value = parsed.style;
+    }
+    if (parsed.days && t.startDate) {
+      const start = parseDate(t.startDate);
+      if (start) {
+        const end = new Date(start.getTime());
+        end.setDate(end.getDate() + parsed.days - 1);
+        t.endDate = fmtDate(end);
+        if ($("trip-end")) $("trip-end").value = t.endDate;
+      }
+    }
+    touch(t);
+    renderDestChips(t);
+    renderTripList();
+    renderOverview(t);
+    weatherCacheKey = "";
+    loadWeather(true);
+    scheduleMapRefresh(true);
+    if (btn) btn.classList.remove("is-parsing");
+    hapticOk();
+    toast(
+      "已解析 " +
+        dests.length +
+        " 站：" +
+        dests.map(displayCityShort).join(" → ")
+    );
   }
 
   /** 按行程日生成天气槽：{date, city, dayIndex, label} */
@@ -3847,47 +3787,55 @@
       renderTripList();
     });
 
-    // 多目的地：添加城市（可连续多选，不会替换已有城市）
-    function commitDestInput(fromAuto) {
-      const t = activeTrip();
-      const input = $("trip-dest-input");
-      if (!t || !input) return;
-      const raw = input.value.trim();
-      if (!raw) return;
-      const before = getDestinations(t).length;
-      addDestination(t, raw, { quiet: true });
-      const after = getDestinations(t).length;
-      if (after > before) {
-        input.value = "";
-        touch(t);
-        renderDestChips(t);
-        renderTripList();
-        weatherCacheKey = "";
-        loadWeather(false);
-        scheduleMapRefresh(true);
-        toast(
-          "已加入 · 当前 " + after + " 城" + (fromAuto ? "" : "（可继续点选/添加）")
-        );
-      } else if (!raw) {
-        /* empty */
-      }
+    // AI 智能路线解析
+    if ($("btn-route-ai-parse")) {
+      $("btn-route-ai-parse").addEventListener("click", runRouteAiParse);
     }
-    if ($("btn-add-dest")) {
-      $("btn-add-dest").addEventListener("click", () => commitDestInput(false));
-    }
-    if ($("trip-dest-input")) {
-      $("trip-dest-input").addEventListener("keydown", (e) => {
+    if ($("route-ai-input")) {
+      $("route-ai-input").addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          commitDestInput(false);
+          runRouteAiParse();
         }
       });
-      // 从 datalist 点选后自动加入（不必再按回车）
-      $("trip-dest-input").addEventListener("change", () => {
-        const v = $("trip-dest-input").value.trim();
-        if (!v) return;
-        // 单城或带分隔的多城串都尝试加入
-        commitDestInput(true);
+    }
+    // 灵感 pills
+    const pills = $("inspire-pills");
+    if (pills) {
+      pills.addEventListener("click", (e) => {
+        const btn = e.target.closest(".inspire-pill");
+        if (!btn) return;
+        const t = activeTrip();
+        if (!t) {
+          toast("请先打开或创建行程");
+          return;
+        }
+        if (btn.dataset.route) {
+          const raw = btn.dataset.route;
+          if ($("route-ai-input")) $("route-ai-input").value = raw;
+          const parts =
+            (window.TravelGenerator &&
+              TravelGenerator.parseDestinations({ destination: raw })) ||
+            raw.split(/\s*→\s*/).map((s) => s.trim());
+          const dests = parts
+            .map((p) => toProvinceCityLabel(p) || p)
+            .filter(Boolean);
+          if (dests.length) {
+            setDestinations(t, dests);
+            touch(t);
+            renderDestChips(t);
+            renderTripList();
+            weatherCacheKey = "";
+            loadWeather(false);
+            scheduleMapRefresh(true);
+            toast("已套用灵感：" + dests.map(displayCityShort).join(" → "));
+            hapticOk();
+          }
+          return;
+        }
+        if (btn.dataset.city) {
+          appendDestinationStop(t, btn.dataset.city);
+        }
       });
     }
     document.querySelectorAll('input[name="route-mode"]').forEach((r) => {
