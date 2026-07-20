@@ -1615,6 +1615,29 @@ html.photo-mode .gacha-card::before {
   margin-bottom: 4px;
 }
 
+.config-bar-title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.config-bar.is-collapsed .config-bar-body {
+  display: none !important;
+}
+
+.config-bar.is-collapsed .config-bar-card {
+  box-shadow: none;
+}
+
+.config-bar.is-collapsed .config-bar-main {
+  padding-bottom: 8px;
+}
+
+#btn-config-collapse {
+  flex-shrink: 0;
+}
+
 .config-bar .dest-field {
   flex: none;
   width: 100%;
@@ -2664,13 +2687,15 @@ textarea {
 
 .act-row {
   /* FIX: minmax(0,1fr) 防止 1fr 子项 min-content 把布局撑破并裁切 */
+  /* 手柄 | 时间 | 地点 | 备注 | 导航 | 删除 */
   display: grid;
   grid-template-columns:
     28px
     minmax(64px, 80px)
     minmax(0, 1.15fr)
-    minmax(80px, 1fr)
-    36px;
+    minmax(70px, 1fr)
+    32px
+    32px;
   gap: 8px;
   margin-bottom: 0;
   align-items: center;
@@ -2686,13 +2711,20 @@ textarea {
   box-sizing: border-box;
 }
 .act-row.has-map-pin {
+  /* 手柄 | 时间 | 地点 | 📌 | 备注 | 导航 | 删除 */
   grid-template-columns:
     28px
     minmax(64px, 80px)
-    minmax(0, 1.15fr)
+    minmax(0, 1.1fr)
     28px
-    minmax(80px, 1fr)
-    36px;
+    minmax(70px, 1fr)
+    32px
+    32px;
+}
+
+.act-nav-btn {
+  font-size: 0.95rem;
+  color: var(--primary-text, #006a70);
 }
 
 /* FIX: 所有网格子项允许缩小，否则文本把列撑死 */

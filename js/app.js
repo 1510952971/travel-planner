@@ -8,6 +8,7 @@
   const STORAGE_KEY = "travel_planner_v1";
   const THEME_KEY = "travel_planner_theme";
   const SIDEBAR_KEY = "travel_planner_sidebar_collapsed";
+  const CONFIG_COLLAPSE_KEY = "travel_planner_config_collapsed";
   const BUDGET_CATS = ["交通", "住宿", "餐饮", "门票", "购物", "其他"];
   const CURRENCIES = ["CNY", "USD", "EUR", "JPY", "HKD"];
   const PACK_TEMPLATE = [
@@ -898,16 +899,24 @@
     if (name === "buddy") renderBuddyBoard();
   }
 
+  function getMapFocusDay() {
+    const sel = $("map-focus-day");
+    if (!sel || sel.value === "all" || sel.value === "") return undefined;
+    const n = Number(sel.value);
+    return Number.isFinite(n) ? n : undefined;
+  }
+
   function scheduleMapRefresh(force, focusDay) {
     clearTimeout(mapRefreshTimer);
     mapRefreshTimer = setTimeout(async () => {
       const t = activeTrip();
       if (t && window.TravelMap) {
         const showCaution = !!($("chk-caution") && $("chk-caution").checked);
+        const fd = focusDay != null ? focusDay : getMapFocusDay();
         await TravelMap.renderTripMap(t, {
           force: !!force,
           showCaution,
-          focusDay: focusDay != null ? focusDay : undefined,
+          focusDay: fd,
         });
         updateRouteStats(t);
         // 选点模式在重绘后保持
@@ -916,6 +925,72 @@
         }
       }
     }, force ? 60 : 280);
+  }
+
+  function fillMapFocusDaySelect(t) {
+    const sel = $("map-focus-day");
+    if (!sel) return;
+    const prev = sel.value;
+    const days = (t && t.days) || [];
+    sel.innerHTML = "";
+    const all = document.createElement("option");
+    all.value = "all";
+    all.textContent = "全部日";
+    sel.appendChild(all);
+    days.forEach((d, i) => {
+      const o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = "仅 D" + (i + 1) + (d.city ? " · " + d.city : "");
+      sel.appendChild(o);
+    });
+    if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+    else sel.value = "all";
+  }
+
+  function setConfigCollapsed(collapsed) {
+    const bar = $("config-rail");
+    const body = $("config-bar-body");
+    const btn = $("btn-config-collapse");
+    if (bar) bar.classList.toggle("is-collapsed", !!collapsed);
+    if (body) body.hidden = !!collapsed;
+    if (btn) {
+      btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      btn.textContent = collapsed ? "▾ 展开配置" : "▴ 收起";
+      btn.title = collapsed ? "展开路线与日期配置" : "折叠配置，腾出下方空间";
+    }
+    try {
+      localStorage.setItem(CONFIG_COLLAPSE_KEY, collapsed ? "1" : "0");
+    } catch (_) {}
+    setTimeout(() => {
+      if (window.TravelMap && TravelMap.invalidate) TravelMap.invalidate();
+    }, 200);
+  }
+
+  function openNavForActivity(act, day, t) {
+    const place = (act && act.place) || "";
+    const city = dayCityOf(t, day) || primaryCityOf(t) || "";
+    let url = "";
+    if (act && act.lat != null && act.lng != null && act.lat !== "") {
+      const lat = Number(act.lat);
+      const lng = Number(act.lng);
+      // 通用查询，手机可唤起地图 App
+      url =
+        "https://www.google.com/maps/search/?api=1&query=" +
+        encodeURIComponent(lat + "," + lng);
+    } else {
+      const q = [place, city].filter(Boolean).join(" ");
+      if (!q) {
+        toast("没有地点可导航");
+        return;
+      }
+      url =
+        "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q);
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  function primaryCityOf(t) {
+    return primaryCity(t);
   }
 
   function fillMapPickDaySelect(t) {
@@ -929,6 +1004,7 @@
       o.value = "0";
       o.textContent = "D1";
       sel.appendChild(o);
+      fillMapFocusDaySelect(t);
       return;
     }
     days.forEach((d, i) => {
@@ -947,6 +1023,7 @@
       sel.value =
         openIdx != null && Number(openIdx) < days.length ? String(openIdx) : "0";
     }
+    fillMapFocusDaySelect(t);
   }
 
   function syncMapPickMode(keepOn) {
@@ -2227,11 +2304,21 @@
       }
     });
 
+    const navBtn = document.createElement("button");
+    navBtn.type = "button";
+    navBtn.className = "btn-icon act-nav-btn";
+    navBtn.title = "在地图中打开导航";
+    navBtn.textContent = "↗";
+    navBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openNavForActivity(act, day, t);
+    });
+
     // 手柄按下时确保可拖
     handle.addEventListener("mousedown", () => {
       row.draggable = true;
     });
-    [time, place, note, del].forEach((el) => {
+    [time, place, note, navBtn, del].forEach((el) => {
       el.addEventListener("mousedown", () => {
         row.draggable = false;
       });
@@ -2240,8 +2327,8 @@
       });
     });
 
-    if (pinBadge) row.append(handle, time, place, pinBadge, note, del);
-    else row.append(handle, time, place, note, del);
+    if (pinBadge) row.append(handle, time, place, pinBadge, note, navBtn, del);
+    else row.append(handle, time, place, note, navBtn, del);
 
     // 时间拨轮 + 机位坐标：常驻
     const dial = document.createElement("input");
@@ -4168,6 +4255,50 @@
       loadWeather(true);
       toast("已复制整段行程");
     });
+
+    if ($("btn-export-ics")) {
+      $("btn-export-ics").addEventListener("click", () => {
+        const t = activeTrip();
+        if (!t || !window.TravelExport || !TravelExport.tripToIcs) {
+          toast("导出模块未就绪");
+          return;
+        }
+        if (!t.days || !t.days.length) {
+          toast("没有可导出的日程天");
+          return;
+        }
+        const safe = (t.title || "trip").replace(/[\\/:*?"<>|]/g, "_");
+        TravelExport.downloadText(
+          safe + ".ics",
+          TravelExport.tripToIcs(t),
+          "text/calendar;charset=utf-8"
+        );
+        toast("已导出日历 ICS");
+        hapticOk();
+      });
+    }
+
+    if ($("btn-config-collapse")) {
+      $("btn-config-collapse").addEventListener("click", () => {
+        const bar = $("config-rail");
+        const next = !(bar && bar.classList.contains("is-collapsed"));
+        setConfigCollapsed(next);
+        hapticLight();
+      });
+      try {
+        if (localStorage.getItem(CONFIG_COLLAPSE_KEY) === "1") {
+          setConfigCollapsed(true);
+        }
+      } catch (_) {}
+    }
+
+    if ($("map-focus-day")) {
+      $("map-focus-day").addEventListener("change", () => {
+        scheduleMapRefresh(true);
+        const v = $("map-focus-day").value;
+        toast(v === "all" ? "地图显示全部日" : "地图仅显示 D" + (Number(v) + 1));
+      });
+    }
 
     $("btn-export-md").addEventListener("click", () => {
       const t = activeTrip();

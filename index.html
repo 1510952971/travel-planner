@@ -90,6 +90,7 @@
             <button type="button" class="btn btn-ghost" id="btn-export-md">Markdown</button>
             <button type="button" class="btn btn-ghost" id="btn-export-html">分享页</button>
             <button type="button" class="btn btn-ghost" id="btn-export-editorial">摄影志</button>
+            <button type="button" class="btn btn-ghost" id="btn-export-ics" title="导出日历 ICS，可导入系统日历">日历</button>
             <button type="button" class="btn btn-ghost" id="btn-copy-share">复制摘要</button>
             <button type="button" class="btn btn-ghost" id="btn-help">?</button>
             <button type="button" class="btn btn-danger" id="btn-delete-trip">删除</button>
@@ -103,35 +104,40 @@
               <div class="dest-field">
                 <div class="config-bar-title-row">
                   <span class="dest-field-label">路线站序 <em>省·市·县 · 可重复途经</em></span>
-                  <div class="route-mode-row" id="route-mode-row">
-                    <span class="route-mode-label">路线</span>
-                    <label class="route-mode-opt"><input type="radio" name="route-mode" value="linear" checked /> 线性</label>
-                    <label class="route-mode-opt"><input type="radio" name="route-mode" value="loop" /> 环线</label>
+                  <div class="config-bar-title-actions">
+                    <div class="route-mode-row" id="route-mode-row">
+                      <span class="route-mode-label">路线</span>
+                      <label class="route-mode-opt"><input type="radio" name="route-mode" value="linear" checked /> 线性</label>
+                      <label class="route-mode-opt"><input type="radio" name="route-mode" value="loop" /> 环线</label>
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-sm" id="btn-config-collapse" title="折叠配置，腾出下方空间" aria-expanded="true">▴ 收起</button>
                   </div>
                 </div>
-                <div class="dest-path-preview" id="dest-path-preview">尚未选择城市</div>
-                <div class="dest-chips" id="dest-chips" aria-label="路线站序"></div>
-                <div class="dest-pick-label">点选省·市；「▾县」选下辖县市</div>
-                <div class="dest-pick-grid" id="dest-pick-grid" role="group" aria-label="常用城市多选"></div>
-                <div class="dest-add-row">
-                  <input id="trip-dest-input" list="dest-suggest" placeholder="手写：浙江·金华·义乌" autocomplete="off" />
-                  <button type="button" class="btn btn-primary btn-sm" id="btn-add-dest">加入</button>
+                <div class="config-bar-body" id="config-bar-body">
+                  <div class="dest-path-preview" id="dest-path-preview">尚未选择城市</div>
+                  <div class="dest-chips" id="dest-chips" aria-label="路线站序"></div>
+                  <div class="dest-pick-label">点选省·市；「▾县」选下辖县市</div>
+                  <div class="dest-pick-grid" id="dest-pick-grid" role="group" aria-label="常用城市多选"></div>
+                  <div class="dest-add-row">
+                    <input id="trip-dest-input" list="dest-suggest" placeholder="手写：浙江·金华·义乌" autocomplete="off" />
+                    <button type="button" class="btn btn-primary btn-sm" id="btn-add-dest">加入</button>
+                  </div>
+                  <div class="config-meta-grid">
+                    <label>出发 <input type="date" id="trip-start" /></label>
+                    <label>返回 <input type="date" id="trip-end" /></label>
+                    <label>人数 <input type="number" id="trip-people" min="1" value="1" /></label>
+                    <label>偏好
+                      <select id="trip-style">
+                        <option value="balanced">均衡游</option>
+                        <option value="deep">深度游</option>
+                        <option value="rush">特种兵</option>
+                        <option value="family">亲子</option>
+                        <option value="food">美食向</option>
+                        <option value="photo">拍照打卡</option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
-              </div>
-              <div class="config-meta-grid">
-                <label>出发 <input type="date" id="trip-start" /></label>
-                <label>返回 <input type="date" id="trip-end" /></label>
-                <label>人数 <input type="number" id="trip-people" min="1" value="1" /></label>
-                <label>偏好
-                  <select id="trip-style">
-                    <option value="balanced">均衡游</option>
-                    <option value="deep">深度游</option>
-                    <option value="rush">特种兵</option>
-                    <option value="family">亲子</option>
-                    <option value="food">美食向</option>
-                    <option value="photo">拍照打卡</option>
-                  </select>
-                </label>
               </div>
             </div>
           </div>
@@ -244,6 +250,12 @@
             <button type="button" class="btn btn-ghost btn-sm" id="btn-gen-days">按日期铺开</button>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-optimize-all">优化全部日路线</button>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh-map">刷新路线</button>
+            <label class="hint-text" style="margin:0;display:inline-flex;align-items:center;gap:6px">
+              地图显示
+              <select id="map-focus-day" class="map-pick-day" title="地图只显示某日或全部" aria-label="地图按日筛选">
+                <option value="all">全部日</option>
+              </select>
+            </label>
             <label class="hint-text" style="margin:0;display:inline-flex;align-items:center;gap:6px">
               <input type="checkbox" id="chk-caution" /> 示意安全圈
             </label>
@@ -481,6 +493,10 @@
         <div>复制摘要</div><div>可粘贴到微信的纯文本行程</div>
         <div>多城行程</div><div>站序「省·市」或「省·市·县」（浙江·金华·义乌）；▾县 展开下辖；可重复途经</div>
         <div>侧栏</div><div>点品牌旁 ⟨ 收起；左缘 ⟩ 或按键 <kbd>[</kbd> 展开/切换</div>
+        <div>配置区</div><div>「▴ 收起」折叠站序卡片，腾出概览/地图空间</div>
+        <div>地图选点</div><div>日程页勾选「选点」后点地图；钉点可拖；站点 ↗ 打开导航</div>
+        <div>地图筛选</div><div>「地图显示」下拉：全部日 / 仅某一天</div>
+        <div>日历导出</div><div>顶栏「日历」导出 ICS，可导入系统日历</div>
         <div>城市排序</div><div>拖拽芯片调站序；× 只删本站不删其它同名站；重抽按站序分天</div>
         <div>按日天气</div><div>概览天气按日程日+当日城市显示；点城市标签可筛选</div>
         <div>一句话多城</div><div>例：东京→京都→大阪 5天环线 · 或 成都,重庆 周末</div>

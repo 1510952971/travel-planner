@@ -470,6 +470,9 @@
     let focusPts = [];
 
     for (let di = 0; di < days.length; di++) {
+      // 按日筛选：只画某一天
+      if (opts.focusDay != null && opts.focusDay !== di) continue;
+
       const day = days[di];
       const color = DAY_COLORS[di % DAY_COLORS.length];
       const acts = day.activities || [];

@@ -274,10 +274,87 @@ ${wrapped}
 </html>`;
   }
 
+  /** 导出 ICS 日历（每日程一天事件，含站点摘要） */
+  function tripToIcs(t) {
+    if (!t) return "";
+    const lines = [];
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\.\d{3}/, "");
+    lines.push("BEGIN:VCALENDAR");
+    lines.push("VERSION:2.0");
+    lines.push("PRODID:-//Fluid Travel//travel-planner//CN");
+    lines.push("CALSCALE:GREGORIAN");
+    lines.push("METHOD:PUBLISH");
+    lines.push("X-WR-CALNAME:" + icsEscape(t.title || "旅程"));
+
+    (t.days || []).forEach((d, di) => {
+      const date = (d.date || t.startDate || "").replace(/-/g, "");
+      if (!date || date.length !== 8) return;
+      const places = (d.activities || [])
+        .map((a) => (a.place || "").trim())
+        .filter(Boolean)
+        .slice(0, 12);
+      const desc = places
+        .map((p, i) => i + 1 + ". " + p)
+        .join("\\n");
+      const city = d.city || t.destination || "";
+      const summary =
+        "D" +
+        (di + 1) +
+        (city ? " · " + city : "") +
+        " · " +
+        (t.title || "旅程");
+      const uid =
+        (t.id || "trip") +
+        "-d" +
+        di +
+        "-" +
+        date +
+        "@fluid-travel.local";
+      lines.push("BEGIN:VEVENT");
+      lines.push("UID:" + icsEscape(uid));
+      lines.push("DTSTAMP:" + stamp);
+      lines.push("DTSTART;VALUE=DATE:" + date);
+      lines.push("DTEND;VALUE=DATE:" + nextDayYmd(date));
+      lines.push("SUMMARY:" + icsEscape(summary));
+      if (desc) lines.push("DESCRIPTION:" + icsEscape(desc));
+      if (city) lines.push("LOCATION:" + icsEscape(city));
+      lines.push("END:VEVENT");
+    });
+
+    lines.push("END:VCALENDAR");
+    return lines.join("\r\n");
+  }
+
+  function icsEscape(s) {
+    return String(s || "")
+      .replace(/\\/g, "\\\\")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,")
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "");
+  }
+
+  /** YYYYMMDD → 次日 YYYYMMDD */
+  function nextDayYmd(ymd) {
+    const y = Number(ymd.slice(0, 4));
+    const m = Number(ymd.slice(4, 6)) - 1;
+    const d = Number(ymd.slice(6, 8));
+    const dt = new Date(y, m, d);
+    dt.setDate(dt.getDate() + 1);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    return "" + yy + mm + dd;
+  }
+
   global.TravelExport = {
     tripToMarkdown,
     tripToShareHtml,
     tripToEditorialHtml,
+    tripToIcs,
     downloadText,
   };
 })(typeof window !== "undefined" ? window : globalThis);
