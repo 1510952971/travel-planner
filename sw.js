@@ -1,6 +1,6 @@
 /* 旅途 Fluid Travel · 轻量离线壳（缓存静态资源，不缓存地图瓦片） */
 /* 改 UI/逻辑后务必 bump CACHE，否则会一直吃到旧的单目的地页面 */
-const CACHE = "fluid-travel-v16-nav-ics-collapse";
+const CACHE = "fluid-travel-v17-map-zh-search-live";
 const ASSETS = [
   "./",
   "./index.html",

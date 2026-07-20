@@ -57,6 +57,7 @@
   /** @type {null | ((e: any) => void)} */
   let pickClickHandler = null;
   let pickModeOn = false;
+  let baseLayers = null;
 
   /** 示意安全提示圈（非真实犯罪热力） */
   const CAUTION_ZONES = {
@@ -150,11 +151,40 @@
       attributionControl: true,
     }).setView(cityCenter(""), 12);
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-      maxZoom: 19,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; CARTO',
-    }).addTo(map);
+    // 中文标注优先：OSM 本地化地名（国内显示中文）；备选浅色 Carto
+    const osmLocal = L.tileLayer(
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        maxZoom: 19,
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> · 本地化地名',
+      }
+    );
+    // GeoQ 中文社区图（国内标注友好，无 Key；若不可用可切回 OSM）
+    const geoqZh = L.tileLayer(
+      "https://map.geoq.cn/ArcGIS/rest/services/ChinaOnlineCommunity/MapServer/tile/{z}/{y}/{x}",
+      {
+        maxZoom: 16,
+        attribution: "GeoQ · 中文社区图",
+      }
+    );
+    const cartoLight = L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+      {
+        maxZoom: 19,
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; CARTO',
+      }
+    );
+
+    baseLayers = {
+      "中文社区图": geoqZh,
+      "OSM 本地地名": osmLocal,
+      "浅色图": cartoLight,
+    };
+    // 默认中文社区图；失败时用户可右上角图层切换
+    geoqZh.addTo(map);
+    L.control.layers(baseLayers, null, { position: "topright", collapsed: true }).addTo(map);
 
     layerGroup = L.layerGroup().addTo(map);
     cautionGroup = L.layerGroup().addTo(map);
@@ -304,21 +334,105 @@
     return pt;
   }
 
-  function markerIcon(color, label) {
+  /** 截断地名作标签：优先中文/可读短名 */
+  function shortPlaceLabel(place) {
+    let s = String(place || "").trim();
+    if (!s) return "地点";
+    s = s
+      .replace(/^城际移动[：:].*$/, "城际")
+      .replace(/^地图点\s*/, "")
+      .split(/[·•|,，]/)[0]
+      .trim();
+    if (s.length > 8) s = s.slice(0, 8) + "…";
+    return s || "地点";
+  }
+
+  /**
+   * 带序号 + 地名的标记（避免只看到 123 分不清在哪）
+   * @param {string} color
+   * @param {string|number} index
+   * @param {string} [placeName]
+   */
+  function markerIcon(color, index, placeName) {
+    const label = shortPlaceLabel(placeName);
     const html =
-      `<div style="
-        width:28px;height:28px;border-radius:50%;
-        background:${color};color:#0a0a0c;font-weight:800;font-size:11px;
-        display:flex;align-items:center;justify-content:center;
-        border:2px solid rgba(255,255,255,.85);
-        box-shadow:0 4px 14px rgba(0,0,0,.25);
-      ">${label}</div>`;
+      `<div class="trip-marker-bubble" style="--mk:${color}">` +
+      `<span class="trip-marker-idx">${escapeHtml(String(index))}</span>` +
+      `<span class="trip-marker-name">${escapeHtml(label)}</span>` +
+      `</div>`;
     return L.divIcon({
       className: "trip-marker",
       html,
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
+      iconSize: [120, 32],
+      iconAnchor: [16, 16],
     });
+  }
+
+  /** 地点搜索（Open-Meteo + Nominatim，中文优先） */
+  async function searchPlaces(query, biasCity) {
+    const q = String(query || "").trim();
+    if (q.length < 2) return [];
+    const results = [];
+    const hint =
+      global.TravelCityCatalog && global.TravelCityCatalog.geocodeHint
+        ? global.TravelCityCatalog.geocodeHint(biasCity || "")
+        : biasCity || "";
+    const qFull = hint ? q + " " + hint : q;
+
+    try {
+      const url =
+        "https://geocoding-api.open-meteo.com/v1/search?count=6&language=zh&name=" +
+        encodeURIComponent(qFull);
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        (data.results || []).forEach((r) => {
+          results.push({
+            name: r.name || q,
+            label: [r.name, r.admin2, r.admin1, r.country]
+              .filter(Boolean)
+              .join(" · "),
+            lat: r.latitude,
+            lng: r.longitude,
+            source: "open-meteo",
+          });
+        });
+      }
+    } catch (_) {}
+
+    if (results.length < 3) {
+      try {
+        const url =
+          "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=zh-CN&q=" +
+          encodeURIComponent(qFull || q);
+        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        if (res.ok) {
+          const data = await res.json();
+          (data || []).forEach((r) => {
+            const lat = Number(r.lat);
+            const lng = Number(r.lon);
+            if (Number.isNaN(lat)) return;
+            const label = r.display_name || r.name || q;
+            if (results.some((x) => Math.abs(x.lat - lat) < 0.0005 && Math.abs(x.lng - lng) < 0.0005))
+              return;
+            results.push({
+              name: r.name || label.split(",")[0],
+              label: label,
+              lat,
+              lng,
+              source: "nominatim",
+            });
+          });
+        }
+      } catch (_) {}
+    }
+    return results.slice(0, 8);
+  }
+
+  function flyTo(lat, lng, zoom) {
+    const m = ensureMap();
+    if (!m || lat == null) return;
+    m.setView([lat, lng], zoom != null ? zoom : 15, { animate: true });
   }
 
   function dayCityOfTrip(trip, day, fallback) {
@@ -440,7 +554,7 @@
     const m = ensureMap();
     if (!m || !layerGroup) return;
 
-    // 签名必须包含 day.city，否则换城不重绘
+    // 签名必须包含 day.city / place，否则换城、改地点不重绘
     const sig = mapSignature(trip, opts);
     if (sig === lastSignature && !opts.force) {
       m.invalidateSize();
@@ -510,7 +624,7 @@
 
         if (!usePt && place) {
           usePt = await geocode(place || placeRaw, dayCity || dest);
-          // 写回活动点（非地图钉点时）
+          // 写回活动点（非地图钉点时），便于下次即时显示
           if (usePt && acts[ai] && !acts[ai]._mapPinned) {
             acts[ai].lat = usePt[0];
             acts[ai].lng = usePt[1];
@@ -521,8 +635,9 @@
         if (!usePt || Number.isNaN(usePt[0])) continue;
         dayPts.push(usePt);
         allLatLngs.push(usePt);
-        if (opts.focusDay === di) focusPts.push(usePt);
+        if (opts.focusDay === di || opts.focusDay == null) focusPts.push(usePt);
 
+        const displayName = placeRaw || place || "站点";
         const cityTag = dayCity
           ? `<br/><span style="opacity:.65">📍 ${escapeHtml(dayCity)}</span>`
           : "";
@@ -535,13 +650,15 @@
                 acts[ai].lat
               ).toFixed(5)}, ${Number(acts[ai].lng).toFixed(5)}</code>`
             : "";
+        const seqLabel = "D" + (di + 1) + "-" + (ai + 1);
         const mk = L.marker(usePt, {
-          icon: markerIcon(color, String(ai + 1)),
+          icon: markerIcon(color, seqLabel, displayName),
           draggable: !!acts[ai]._mapPinned,
+          title: seqLabel + " " + displayName,
         }).bindPopup(
-          `<strong>D${di + 1} · ${escapeHtml(acts[ai].time || "")}</strong><br/>${escapeHtml(
-            acts[ai].place || ""
-          )}${cityTag}${pinTag}${coordTag}<br/><span style="opacity:.7">${escapeHtml(
+          `<strong>${escapeHtml(seqLabel)} · ${escapeHtml(
+            acts[ai].time || ""
+          )}</strong><br/>${escapeHtml(displayName)}${cityTag}${pinTag}${coordTag}<br/><span style="opacity:.7">${escapeHtml(
             acts[ai].note || ""
           )}</span>`
         );
@@ -580,16 +697,18 @@
       }
     }
 
-    // 初始视角：优先焦点日 / 全部点 / 首城
-    const fitPts = focusPts.length ? focusPts : allLatLngs;
-    if (fitPts.length) {
-      try {
-        m.fitBounds(L.latLngBounds(fitPts).pad(0.25));
-      } catch (_) {
-        m.setView(fitPts[0], 12);
+    // 编辑地点时 keepView：不抢当前视角，便于边填边看
+    if (!opts.keepView) {
+      const fitPts = focusPts.length ? focusPts : allLatLngs;
+      if (fitPts.length) {
+        try {
+          m.fitBounds(L.latLngBounds(fitPts).pad(0.25));
+        } catch (_) {
+          m.setView(fitPts[0], 12);
+        }
+      } else {
+        m.setView(cityCenter(dest), 11);
       }
-    } else {
-      m.setView(cityCenter(dest), 11);
     }
 
     // 警戒圈用首城或焦点日城市
@@ -701,7 +820,10 @@
     cityCenter,
     geocode,
     reverseGeocode,
+    searchPlaces,
+    flyTo,
     cleanPlaceName,
+    shortPlaceLabel,
     resolveTripPoints,
     renderCautionZones,
     clearDayGeoPins,

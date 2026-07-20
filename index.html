@@ -270,13 +270,19 @@
                     <input type="checkbox" id="chk-map-pick" /> 选点
                   </label>
                   <select id="map-pick-day" class="map-pick-day" title="选点落入哪一天" aria-label="选点目标日"></select>
-                  <span class="map-legend" id="map-legend">OSM · 约 — km</span>
+                  <span class="map-legend" id="map-legend">约 — km</span>
                 </div>
               </div>
-              <div id="trip-map" class="trip-map" role="img" aria-label="行程地图，可开启选点"></div>
+              <div class="map-search-bar">
+                <input type="search" id="map-search-input" class="map-search-input" placeholder="搜索地点（中文）…" autocomplete="off" />
+                <button type="button" class="btn btn-ghost btn-sm" id="map-search-go">搜索</button>
+                <button type="button" class="btn btn-primary btn-sm" id="map-search-add" title="将搜索结果或当前定位加入所选日">加入当日</button>
+              </div>
+              <div id="map-search-results" class="map-search-results" hidden></div>
+              <div id="trip-map" class="trip-map" role="img" aria-label="行程地图，可搜索与选点"></div>
               <div id="day-km-list" class="day-km-list"></div>
               <p class="map-footnote" id="map-footnote">
-                开启「选点」后点击地图，将坐标加入所选日。免费 OSM 瓦片 · 非商用导航。
+                中文底图可切换（右上图层）· 搜索或「选点」加点 · 右侧改地点会自动同步到地图 · 标记为 D日-序号 + 地名
               </p>
             </div>
             <div class="timeline-pane">

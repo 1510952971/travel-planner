@@ -906,7 +906,7 @@
     return Number.isFinite(n) ? n : undefined;
   }
 
-  function scheduleMapRefresh(force, focusDay) {
+  function scheduleMapRefresh(force, focusDay, keepView) {
     clearTimeout(mapRefreshTimer);
     mapRefreshTimer = setTimeout(async () => {
       const t = activeTrip();
@@ -917,6 +917,7 @@
           force: !!force,
           showCaution,
           focusDay: fd,
+          keepView: !!keepView,
         });
         updateRouteStats(t);
         // 选点模式在重绘后保持
@@ -926,6 +927,18 @@
       }
     }, force ? 60 : 280);
   }
+
+  /** 填写地点后防抖刷新地图（保持视角，避免边打字边飞走） */
+  let mapEditDebounce = null;
+  function scheduleMapRefreshFromPlaceEdit() {
+    clearTimeout(mapEditDebounce);
+    mapEditDebounce = setTimeout(() => {
+      scheduleMapRefresh(true, undefined, true);
+    }, 420);
+  }
+
+  /** 地图搜索最近一次选中结果 */
+  let mapSearchHit = null;
 
   function fillMapFocusDaySelect(t) {
     const sel = $("map-focus-day");
@@ -2208,18 +2221,20 @@
       }
     });
     const place = document.createElement("input");
-    place.placeholder = "地点";
+    place.placeholder = "地点（填写后地图自动更新）";
     place.value = act.place || "";
     place.addEventListener("input", () => {
       act.place = place.value;
-      // 手改地名后解除地图钉（除非仍是地图点前缀）
-      if (act._mapPinned) {
-        act._mapPinned = false;
-        delete act.lat;
-        delete act.lng;
-        delete act._geoCity;
-      }
+      // 手改地名：清坐标以便重新地理编码，并实时刷新地图
+      act._mapPinned = false;
+      delete act.lat;
+      delete act.lng;
+      delete act._geoCity;
       touch(t);
+      scheduleMapRefreshFromPlaceEdit();
+    });
+    place.addEventListener("change", () => {
+      scheduleMapRefresh(true, undefined, true);
     });
     const note = document.createElement("input");
     note.placeholder = "备注";
@@ -4297,6 +4312,115 @@
         scheduleMapRefresh(true);
         const v = $("map-focus-day").value;
         toast(v === "all" ? "地图显示全部日" : "地图仅显示 D" + (Number(v) + 1));
+      });
+    }
+
+    // 地图搜索框
+    async function runMapSearch() {
+      const input = $("map-search-input");
+      const box = $("map-search-results");
+      if (!input || !box || !window.TravelMap || !TravelMap.searchPlaces) return;
+      const q = input.value.trim();
+      if (q.length < 2) {
+        toast("输入至少 2 个字搜索");
+        return;
+      }
+      box.hidden = false;
+      box.innerHTML = '<div class="map-search-item"><small>搜索中…</small></div>';
+      const t = activeTrip();
+      const di = Number($("map-pick-day") && $("map-pick-day").value) || 0;
+      const bias =
+        t && t.days && t.days[di]
+          ? dayCityOf(t, t.days[di])
+          : primaryCity(t) || "";
+      let list = [];
+      try {
+        list = await TravelMap.searchPlaces(q, bias);
+      } catch (_) {}
+      mapSearchHit = null;
+      if (!list.length) {
+        box.innerHTML =
+          '<div class="map-search-item"><small>没有结果，可换关键词或直接「选点」</small></div>';
+        return;
+      }
+      box.innerHTML = "";
+      list.forEach((hit, i) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "map-search-item" + (i === 0 ? " is-active" : "");
+        btn.innerHTML =
+          escapeHtml(hit.name || hit.label) +
+          "<small>" +
+          escapeHtml(hit.label || "") +
+          "</small>";
+        btn.addEventListener("click", () => {
+          box.querySelectorAll(".map-search-item").forEach((el) =>
+            el.classList.remove("is-active")
+          );
+          btn.classList.add("is-active");
+          mapSearchHit = hit;
+          TravelMap.flyTo(hit.lat, hit.lng, 15);
+          toast("已定位：" + (hit.name || hit.label));
+        });
+        box.appendChild(btn);
+      });
+      mapSearchHit = list[0];
+      TravelMap.flyTo(list[0].lat, list[0].lng, 14);
+    }
+
+    function addMapSearchHitToDay() {
+      const t = activeTrip();
+      if (!t) {
+        toast("请先打开行程");
+        return;
+      }
+      if (!mapSearchHit) {
+        toast("请先搜索并点选一个结果");
+        return;
+      }
+      if (!t.days || !t.days.length) {
+        toast("请先添加日程天");
+        return;
+      }
+      let di = Number($("map-pick-day") && $("map-pick-day").value);
+      if (!Number.isFinite(di) || di < 0 || di >= t.days.length) di = 0;
+      const day = t.days[di];
+      const hit = mapSearchHit;
+      withUndo(() => {
+        if (!day.activities) day.activities = [];
+        day.activities.push({
+          time: "",
+          place: hit.name || hit.label,
+          note: "地图搜索",
+          lat: hit.lat,
+          lng: hit.lng,
+          _geoCity: dayCityOf(t, day) || "",
+          _mapPinned: true,
+        });
+        touch(t);
+      });
+      state.openDays[di] = true;
+      renderDays(t);
+      renderOverview(t);
+      scheduleMapRefresh(true, di);
+      const box = $("map-search-results");
+      if (box) box.hidden = true;
+      hapticOk();
+      toast("已加入 D" + (di + 1) + " · " + (hit.name || hit.label));
+    }
+
+    if ($("map-search-go")) {
+      $("map-search-go").addEventListener("click", runMapSearch);
+    }
+    if ($("map-search-add")) {
+      $("map-search-add").addEventListener("click", addMapSearchHitToDay);
+    }
+    if ($("map-search-input")) {
+      $("map-search-input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          runMapSearch();
+        }
       });
     }
 

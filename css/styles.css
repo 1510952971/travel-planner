@@ -2380,6 +2380,136 @@ textarea {
   cursor: crosshair;
 }
 
+.map-search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.map-search-input {
+  flex: 1 1 140px;
+  min-width: 120px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+.map-search-input:focus {
+  outline: none;
+  border-color: rgba(0, 232, 240, 0.5);
+  box-shadow: 0 0 0 2px var(--neon-mint-dim);
+}
+
+.map-search-results {
+  flex: 0 0 auto;
+  max-height: 140px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  scrollbar-width: thin;
+}
+
+.map-search-results[hidden] {
+  display: none !important;
+}
+
+.map-search-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.map-search-item:hover,
+.map-search-item.is-active {
+  background: rgba(0, 232, 240, 0.1);
+}
+
+.map-search-item small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
+/* 地图标记：序号 + 地名 */
+.leaflet-div-icon.trip-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.trip-marker-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 130px;
+  padding: 2px 8px 2px 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #1a1a1e;
+}
+
+[data-theme="dark"] .trip-marker-bubble {
+  background: rgba(28, 28, 32, 0.94);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f4f4f6;
+}
+
+.trip-marker-idx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--mk, #00e8f0);
+  color: #0a0a0c;
+  font-weight: 800;
+  font-size: 10px;
+}
+
+.trip-marker-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  max-width: 6.5em;
+}
+
+.trip-map-tooltip {
+  background: rgba(20, 20, 24, 0.88) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 3px 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+}
+
+.trip-map-tooltip::before {
+  border-top-color: rgba(20, 20, 24, 0.88) !important;
+}
+
 .act-pin-badge {
   font-size: 0.68rem;
   padding: 2px 6px;
